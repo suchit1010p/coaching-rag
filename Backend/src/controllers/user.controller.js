@@ -131,6 +131,55 @@ const logoutUser = asyncHandler(async (req, res) => {
         )
 })
 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    try {
+        const decodedToken = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        );
+
+        const user = await User.findById(decodedToken?._id).select("+refreshToken");
+
+        if (!user) {
+            throw new ApiError(401, "Invalid refresh token");
+        }
+
+        if (incomingRefreshToken !== user.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used");
+        }
+
+        const { accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefereshTokens(user._id);
+        const safeUser = await User.findById(user._id).select("-password -refreshToken");
+
+        const options = {
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        };
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    { accessToken, refreshToken: newRefreshToken, user: safeUser },
+                    "Access token refreshed successfully"
+                )
+            );
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Invalid refresh token");
+    }
+});
+
 // register student
 const registerStudent = asyncHandler(async (req, res) => {
     const { rollNumber, name, mobile, password, parentName, parentMobile, batchId } = req.body
@@ -510,12 +559,14 @@ const getAllStudentsOfSubject = asyncHandler(async (req, res) => {
     // main logic------------------
     const studentSubjects = await StudentSubject.aggregate([
         { $match: { subject: subject._id } },
-        { $lookup: {
-            from: "students",
-            localField: "student",
-            foreignField: "_id",
-            as: "studentDetails"
-        }},
+        {
+            $lookup: {
+                from: "students",
+                localField: "student",
+                foreignField: "_id",
+                as: "studentDetails"
+            }
+        },
         { $unwind: "$studentDetails" },
         { $project: { "studentDetails.password": 0 } }
     ])
@@ -800,6 +851,7 @@ export {
     registerUser,
     loginUser,
     logoutUser,
+    refreshAccessToken,
 
     // student functions
     registerStudent,
