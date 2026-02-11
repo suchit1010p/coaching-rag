@@ -140,7 +140,7 @@ const getStudentSubjects = asyncHandler(async (req, res) => {
         );
 });
 
-// Get Units of a Subject (only if student is enrolled)
+// Get Units of a Subject (User or Student)
 const getSubjectUnits = asyncHandler(async (req, res) => {
     const { subjectId } = req.body;
 
@@ -148,15 +148,19 @@ const getSubjectUnits = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Subject ID is required");
     }
 
-    // Verify student is enrolled in this subject
-    const enrollment = await StudentSubject.findOne({
-        student: req.student._id,
-        subject: subjectId
-    });
+    // Checking Enrollment Only if it is a Student
+    if (req.student) {
+        // Verify student is enrolled in this subject
+        const enrollment = await StudentSubject.findOne({
+            student: req.student._id,
+            subject: subjectId
+        });
 
-    if (!enrollment) {
-        throw new ApiError(403, "You are not enrolled in this subject");
+        if (!enrollment) {
+            throw new ApiError(403, "You are not enrolled in this subject");
+        }
     }
+    // If req.user exists (Teacher/Admin), we skip enrollment check and proceed.
 
     const units = await Unit.find({ subject: subjectId })
         .select('title createdAt')
@@ -167,7 +171,7 @@ const getSubjectUnits = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, units, "Units fetched successfully"));
 });
 
-// Get Materials of a Unit (only if student is enrolled in the subject)
+// Get Materials of a Unit (User or Student)
 const getUnitMaterials = asyncHandler(async (req, res) => {
     const { unitId } = req.body;
 
@@ -182,15 +186,19 @@ const getUnitMaterials = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Unit not found");
     }
 
-    // Verify student is enrolled in the subject this unit belongs to
-    const enrollment = await StudentSubject.findOne({
-        student: req.student._id,
-        subject: unit.subject._id
-    });
+    // Checking Enrollment Only if it is a Student
+    if (req.student) {
+        // Verify student is enrolled in the subject this unit belongs to
+        const enrollment = await StudentSubject.findOne({
+            student: req.student._id,
+            subject: unit.subject._id
+        });
 
-    if (!enrollment) {
-        throw new ApiError(403, "You are not enrolled in this subject");
+        if (!enrollment) {
+            throw new ApiError(403, "You are not enrolled in this subject");
+        }
     }
+    // If req.user exists, skip check.
 
     const materials = await Material.find({ unit: unitId })
         .select('title fileUrl createdAt')

@@ -21,11 +21,15 @@ app.use(cookieParser());
 // Import routes
 import userRoute from "./routers/user.route.js";
 import studentRoute from "./routers/student.route.js";
+import materialRoute from "./routers/material.route.js";
 
 // User routes (for teachers/admins)
 app.use("/api/v1/users", userRoute);
 
 // Student routes (for students)
 app.use("/api/v1/students", studentRoute);
+
+// Material routes
+app.use("/api/v1/materials", materialRoute);
 
 export { app };
