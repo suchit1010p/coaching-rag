@@ -20,7 +20,7 @@ const generateUploadUrl = asyncHandler(async (req, res) => {
 
     // Generate a unique file name to avoid collisions
     // Structure: materials/unitId/timestamp-filename
-    const key = `materials/${unitId}/${Date.now()}-${fileName}`;
+    const key = `materials/${unitId}/${fileName}`;
 
     try {
         const url = await generatePresignedUrl(key, fileType);
@@ -79,6 +79,7 @@ const getMaterialsByUnit = asyncHandler(async (req, res) => {
     );
 });
 
+
 // Delete Material
 const deleteMaterial = asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -99,9 +100,30 @@ const deleteMaterial = asyncHandler(async (req, res) => {
     );
 });
 
+// Download Material
+const downloadMaterial = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const material = await Material.findById(id);
+    if (!material) {
+        throw new ApiError(404, "Material not found");
+    }
+
+    const url = await generatePresignedGetUrl(material.fileUrl);
+
+    if (!url) {
+        throw new ApiError(500, "Error generating download URL");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, { url }, "Download URL generated successfully")
+    );
+});
+
 export {
     generateUploadUrl,
     createMaterial,
     getMaterialsByUnit,
-    deleteMaterial
+    deleteMaterial,
+    downloadMaterial
 };

@@ -3,17 +3,18 @@ import {
     generateUploadUrl,
     createMaterial,
     getMaterialsByUnit,
-    deleteMaterial
+    deleteMaterial,
+    downloadMaterial
 } from "../controllers/material.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { verifyUserOrStudent } from "../middlewares/auth.unified.middleware.js";
 
 const router = Router();
 
-router.use(verifyJWT); // Apply authentication to all material routes
-
-router.post("/upload-url", generateUploadUrl);
-router.post("/", createMaterial);
-router.get("/unit/:unitId", getMaterialsByUnit);
-router.delete("/:id", deleteMaterial);
+router.post("/upload-url", verifyJWT, generateUploadUrl);
+router.post("/", verifyJWT, createMaterial);
+router.get("/unit/:unitId", verifyUserOrStudent, getMaterialsByUnit);
+router.get("/download/:id", verifyUserOrStudent, downloadMaterial);
+router.delete("/:id", verifyJWT, deleteMaterial);
 
 export default router;
