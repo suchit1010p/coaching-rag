@@ -7,7 +7,8 @@ import {
     getStudentSubjects,
     getSubjectUnits,
     getUnitMaterials,
-    getStudentAttendanceHistory
+    getStudentAttendanceHistory,
+    verifyStudentEmail
 } from "../controllers/student.controller.js";
 import { verifyStudentJWT } from "../middlewares/auth.student.middleware.js";
 import { verifyUserOrStudent } from "../middlewares/auth.unified.middleware.js";
@@ -16,6 +17,7 @@ const router = Router();
 
 // Public routes (no authentication required)
 router.route("/login").post(loginStudent);
+router.route("/verify-email/:token").get(verifyStudentEmail);
 
 // Protected routes (student must be logged in)
 router.route("/logout").post(verifyStudentJWT, logoutStudent);

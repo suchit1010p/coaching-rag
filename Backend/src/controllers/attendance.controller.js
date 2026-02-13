@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Attendance } from "../models/attendance.model.js";
 import { AttendanceEntry } from "../models/attendanceEntry.model.js";
-import { WhatsAppLog } from "../models/whatsAppLog.model.js";
+import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import { Student } from "../models/student.model.js";
 import { Subject } from "../models/subject.model.js";
 import { Batch } from "../models/batch.model.js";
@@ -220,82 +220,14 @@ const finalizeAttendance = asyncHandler(async (req, res) => {
     attendance.isFinal = true;
     await attendance.save();
 
-    // Check if WhatsApp notifications have already been sent for this attendance
-    const checkingwhatsAppLogs = await WhatsAppLog.find({ attendance: attendanceId });
-    // If logs exist, it means notifications have already been sent, so we skip sending again
-    if(checkingwhatsAppLogs.length > 0){
-        return res.status(200).json(
-            new ApiResponse(200, {
-                attendance,
-                absentCount: absentEntries.length,
-            }, "Attendance finalized and notifications already sent")
-        );
-    }
-
-    // Send WhatsApp notifications (mock implementation - replace with actual WhatsApp API)
-    const whatsAppLogs = [];
-    
-    for (const entry of absentEntries) {
-        const student = entry.student;
-        const message = `Dear ${student.parentName}, your ward ${student.name} (Roll No: ${student.rollNumber}) was absent in ${attendance.subject.name} on ${attendance.date.toDateString()}. - ${attendance.batch.name}`;
-
-        try {
-            // Mock WhatsApp sending - Replace with actual WhatsApp API call
-            const response = await sendWhatsAppMessage(student.parentMobile, message);
-            
-            const log = await WhatsAppLog.create({
-                attendance: attendanceId,
-                student: student._id,
-                parentMobile: student.parentMobile,
-                status: "SENT",
-                response: response
-            });
-
-            whatsAppLogs.push(log);
-        } catch (error) {
-            const log = await WhatsAppLog.create({
-                attendance: attendanceId,
-                student: student._id,
-                parentMobile: student.parentMobile,
-                status: "FAILED",
-                response: { error: error.message }
-            });
-
-            whatsAppLogs.push(log);
-        }
-    }
-
     return res.status(200).json(
         new ApiResponse(200, {
             attendance,
             absentCount: absentEntries.length,
-            notificationsSent: whatsAppLogs.filter(log => log.status === "SENT").length,
-            notificationsFailed: whatsAppLogs.filter(log => log.status === "FAILED").length,
-            whatsAppLogs
-        }, "Attendance finalized and notifications sent")
+        }, "Attendance finalized successfully")
     );
 });
 
-/**
- * Mock WhatsApp message sender - Replace with actual implementation
- */
-const sendWhatsAppMessage = async (phoneNumber, message) => {
-    // TODO: Implement actual WhatsApp API integration
-    // Example: Twilio, WhatsApp Business API, etc.
-    
-    console.log(`Sending WhatsApp to ${phoneNumber}: ${message}`);
-    
-    // Simulate API call
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({
-                messageId: `msg_${Date.now()}`,
-                status: "delivered",
-                timestamp: new Date()
-            });
-        }, 100);
-    });
-};
 
 /**
  * Get attendance details by ID
@@ -326,8 +258,8 @@ const getAttendanceById = asyncHandler(async (req, res) => {
     const totalStudents = entries.length;
     const presentCount = entries.filter(e => e.status === "PRESENT").length;
     const absentCount = entries.filter(e => e.status === "ABSENT").length;
-    const attendancePercentage = totalStudents > 0 
-        ? ((presentCount / totalStudents) * 100).toFixed(2) 
+    const attendancePercentage = totalStudents > 0
+        ? ((presentCount / totalStudents) * 100).toFixed(2)
         : 0;
 
     return res.status(200).json(
@@ -391,8 +323,8 @@ const getAllAttendance = asyncHandler(async (req, res) => {
                     totalStudents: entries.length,
                     present: presentCount,
                     absent: absentCount,
-                    attendancePercentage: entries.length > 0 
-                        ? ((presentCount / entries.length) * 100).toFixed(2) 
+                    attendancePercentage: entries.length > 0
+                        ? ((presentCount / entries.length) * 100).toFixed(2)
                         : 0
                 }
             };
@@ -469,7 +401,6 @@ const deleteAttendance = asyncHandler(async (req, res) => {
     await AttendanceEntry.deleteMany({ attendance: attendanceId });
 
     // Delete WhatsApp logs
-    await WhatsAppLog.deleteMany({ attendance: attendanceId });
 
     // Delete attendance session
     await attendance.deleteOne();
@@ -571,8 +502,8 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
             const totalClasses = entries.length;
             const presentCount = entries.filter(e => e.status === "PRESENT").length;
             const absentCount = entries.filter(e => e.status === "ABSENT").length;
-            const percentage = totalClasses > 0 
-                ? ((presentCount / totalClasses) * 100).toFixed(2) 
+            const percentage = totalClasses > 0
+                ? ((presentCount / totalClasses) * 100).toFixed(2)
                 : 0;
 
             return {

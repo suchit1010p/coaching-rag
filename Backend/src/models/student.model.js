@@ -13,6 +13,13 @@ const studentSchema = new mongoose.Schema(
             type: String,
             required: true
         },
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true
+        },
         mobile: {
             type: String,
             required: true,
@@ -36,14 +43,21 @@ const studentSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Batch",
             required: true
+        },
+        verificationToken: {
+            type: String
+        },
+        isVerified: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }
 );
 
 // Hash password before saving
-studentSchema.pre("save",  async function () {
-    if (!this.isModified("password")) return 
+studentSchema.pre("save", async function () {
+    if (!this.isModified("password")) return
 
     this.password = await bcrypt.hash(this.password, 10);
 });

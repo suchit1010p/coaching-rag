@@ -270,7 +270,31 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
         );
 });
 
+// Verify Student Email
+const verifyStudentEmail = asyncHandler(async (req, res) => {
+    const { token } = req.params;
+
+    if (!token) {
+        throw new ApiError(400, "Verification token is required");
+    }
+
+    const student = await Student.findOne({ verificationToken: token });
+
+    if (!student) {
+        throw new ApiError(400, "Invalid or expired verification token");
+    }
+
+    student.isVerified = true;
+    student.verificationToken = undefined; // Clear the token
+    await student.save();
+
+    return res.status(200).json(
+        new ApiResponse(200, {}, "Email verified successfully. You can now login.")
+    );
+});
+
 export {
+    verifyStudentEmail,
     loginStudent,
     logoutStudent,
     getStudentProfile,

@@ -10,6 +10,8 @@ import { Subject } from "../models/subject.model.js";
 import { StudentSubject } from "../models/studentSubject.model.js";
 import { Unit } from "../models/unit.model.js";
 import { Material } from "../models/material.model.js";
+import crypto from "crypto";
+import { sendVerificationEmail } from "../utils/mail.js";
 
 
 // register user
@@ -182,10 +184,10 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 // register student
 const registerStudent = asyncHandler(async (req, res) => {
-    const { rollNumber, name, mobile, password, parentName, parentMobile, batchId } = req.body
+    const { rollNumber, name, mobile, email, password, parentName, parentMobile, batchId } = req.body
 
     if (
-        [rollNumber, name, mobile, password, parentName, parentMobile, batchId].some((field) => field?.trim() === "")
+        [rollNumber, name, mobile, email, password, parentName, parentMobile, batchId].some((field) => field?.trim() === "")
     ) throw new ApiError(400, "All fields are required")
 
     // Validate batch exists
@@ -196,10 +198,18 @@ const registerStudent = asyncHandler(async (req, res) => {
 
     // Check if student with same mobile already exists
     const normalizedMobile = mobile.trim()
-    const existingStudent = await Student.findOne({ mobile: normalizedMobile })
+    const existingStudentvMobile = await Student.findOne({ mobile: normalizedMobile })
 
-    if (existingStudent) {
+    if (existingStudentvMobile) {
         throw new ApiError(409, "Student with this mobile number already exists")
+    }
+
+    // Check if student with same email already exists
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingStudentEmail = await Student.findOne({ email: normalizedEmail });
+
+    if (existingStudentEmail) {
+        throw new ApiError(409, "Student with this email already exists");
     }
 
     // Check if rollNumber already exists in the batch
@@ -210,15 +220,20 @@ const registerStudent = asyncHandler(async (req, res) => {
         throw new ApiError(409, "Roll number already exists in this batch")
     }
 
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
     // Create student entry
     const student = await Student.create({
         rollNumber: normalizedRollNumber,
         name: name.trim(),
         mobile: normalizedMobile,
+        email: normalizedEmail,
         password,
         parentName: parentName.trim(),
         parentMobile: parentMobile.trim(),
-        batch: batchId
+        batch: batchId,
+        verificationToken
     })
 
     // Get student without password and populate batch details
@@ -228,10 +243,17 @@ const registerStudent = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Error while creating student")
     }
 
+    // Send verification email
+    // Construct verification URL (assuming running locally on port 8000 for backend)
+    // In production, this should point to a frontend route which then calls the backend API
+    const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email/${verificationToken}`;
+
+    await sendVerificationEmail(normalizedEmail, studentUser.name, verificationUrl, studentUser.batch.name, studentUser.mobile, password);
+
     return res
         .status(201)
         .json(
-            new ApiResponse(201, studentUser, "Student created successfully")
+            new ApiResponse(201, studentUser, "Student created successfully. Verification email sent.")
         )
 })
 
