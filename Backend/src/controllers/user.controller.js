@@ -272,7 +272,7 @@ const registerStudent = asyncHandler(async (req, res) => {
 // get all students
 const getAllStudents = asyncHandler(async (req, res) => {
     const students = await Student.find().select("-password").populate('batch', 'name')
-    console.log(students)
+    
     return res
         .status(200)
         .json(
