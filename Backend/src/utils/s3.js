@@ -23,6 +23,14 @@ const generatePresignedUrl = async (fileName, fileType) => {
 const deleteFromS3 = async (fileUrl) => {
     try {
         if (!fileUrl) return;
+        if (!String(fileUrl).startsWith("http")) {
+            const command = new DeleteObjectCommand({
+                Bucket: process.env.AWS_BUCKET_NAME,
+                Key: decodeURIComponent(String(fileUrl)),
+            });
+            await s3.send(command);
+            return true;
+        }
 
         // Extract Key from URL
         // URL Format: https://bucket-name.s3.region.amazonaws.com/key

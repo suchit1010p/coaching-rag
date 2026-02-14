@@ -155,13 +155,14 @@ export const deleteUnitFromSubject = (unitId: string) =>
     api.delete("/users/delete/unit", { data: { unitId } });
 
 // --- Materials ---
-export const generateUploadUrl = (fileName: string, fileType: string, unitId: string) =>
-    api.post("/materials/upload-url", { fileName, fileType, unitId });
+export const generateUploadUrl = (fileName: string, unitId: string) =>
+    api.post("/materials/upload-url", { fileName, unitId });
 export const createMaterial = (title: string, unitId: string, fileKey: string, fileType: string) =>
     api.post("/materials", { title, unitId, fileKey, fileType });
 export const getMaterialsByUnit = (unitId: string) =>
-    api.get("/users/get/all/materials/of/unit", { params: { unitId } });
+    api.get(`/materials/unit/${unitId}`);
 export const deleteMaterial = (materialId: string) => api.delete(`/materials/${materialId}`);
+export const getMaterialDownloadUrl = (materialId: string) => api.get(`/materials/download/${materialId}`);
 
 // --- Attendance ---
 export const createAttendance = (subjectId: string, batchId: string, date: string) =>

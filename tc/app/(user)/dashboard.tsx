@@ -11,22 +11,30 @@ import {
     Alert,
     FlatList,
     BackHandler,
+    Linking,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
     addUnitToSubject,
+    createMaterial,
     createBatch,
     createSubject,
+    deleteMaterial,
     deleteSubjectFromBatch,
     deleteUnitFromSubject as deleteUnitFromSubjectApi,
+    generateUploadUrl,
     getAllBatches,
+    getMaterialDownloadUrl,
+    getMaterialsByUnit,
     getAllSubjectsOfBatch,
     getAllUnitsOfSubject,
     updateUnitName,
     updateSubjectName,
 } from '../../services/api';
+
+declare const require: any;
 
 export default function UserDashboard() {
     const { user } = useAuth();
@@ -42,6 +50,9 @@ export default function UserDashboard() {
     const [selectedSubject, setSelectedSubject] = useState<any | null>(null);
     const [units, setUnits] = useState<any[]>([]);
     const [unitsLoading, setUnitsLoading] = useState(false);
+    const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
+    const [materials, setMaterials] = useState<any[]>([]);
+    const [materialsLoading, setMaterialsLoading] = useState(false);
 
     const [createBatchModalVisible, setCreateBatchModalVisible] = useState(false);
     const [newBatchName, setNewBatchName] = useState('');
@@ -66,6 +77,12 @@ export default function UserDashboard() {
     const [updatedUnitName, setUpdatedUnitName] = useState('');
     const [renamingUnit, setRenamingUnit] = useState(false);
     const [deletingUnitId, setDeletingUnitId] = useState<string | null>(null);
+
+    const [createMaterialModalVisible, setCreateMaterialModalVisible] = useState(false);
+    const [newMaterialTitle, setNewMaterialTitle] = useState('');
+    const [selectedMaterialFile, setSelectedMaterialFile] = useState<any | null>(null);
+    const [creatingMaterial, setCreatingMaterial] = useState(false);
+    const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);
 
     const fetchBatches = async () => {
         try {
@@ -145,6 +162,16 @@ export default function UserDashboard() {
                     return true;
                 }
 
+                if (createMaterialModalVisible) {
+                    setCreateMaterialModalVisible(false);
+                    return true;
+                }
+
+                if (selectedUnit) {
+                    handleBackToUnits();
+                    return true;
+                }
+
                 if (selectedSubject) {
                     handleBackToSubjects();
                     return true;
@@ -160,19 +187,21 @@ export default function UserDashboard() {
 
             const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
             return () => subscription.remove();
-        }, [selectedBatch, selectedSubject, createSubjectModalVisible, createBatchModalVisible, renameSubjectModalVisible, renameUnitModalVisible, createUnitModalVisible])
+        }, [selectedBatch, selectedSubject, selectedUnit, createSubjectModalVisible, createBatchModalVisible, renameSubjectModalVisible, renameUnitModalVisible, createUnitModalVisible, createMaterialModalVisible])
     );
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        if (selectedSubject?._id) {
+        if (selectedUnit?._id) {
+            fetchMaterials(selectedUnit._id);
+        } else if (selectedSubject?._id) {
             fetchUnits(selectedSubject._id);
         } else if (selectedBatch?._id) {
             fetchSubjects(selectedBatch._id);
         } else {
             fetchBatches();
         }
-    }, [selectedBatch, selectedSubject]);
+    }, [selectedBatch, selectedSubject, selectedUnit]);
 
     const handleOpenBatch = (batch: any) => {
         setSelectedBatch(batch);
@@ -185,6 +214,8 @@ export default function UserDashboard() {
         setSubjects([]);
         setSelectedSubject(null);
         setUnits([]);
+        setSelectedUnit(null);
+        setMaterials([]);
         setCreateSubjectModalVisible(false);
         setRenameSubjectModalVisible(false);
         setEditingSubject(null);
@@ -193,15 +224,46 @@ export default function UserDashboard() {
         setRenameUnitModalVisible(false);
         setEditingUnit(null);
         setUpdatedUnitName('');
+        setCreateMaterialModalVisible(false);
+        setNewMaterialTitle('');
+        setSelectedMaterialFile(null);
     };
 
     const handleBackToSubjects = () => {
         setSelectedSubject(null);
         setUnits([]);
+        setSelectedUnit(null);
+        setMaterials([]);
         setCreateUnitModalVisible(false);
         setRenameUnitModalVisible(false);
         setEditingUnit(null);
         setUpdatedUnitName('');
+        setCreateMaterialModalVisible(false);
+        setNewMaterialTitle('');
+        setSelectedMaterialFile(null);
+    };
+
+    const handleBackToUnits = () => {
+        setSelectedUnit(null);
+        setMaterials([]);
+        setCreateMaterialModalVisible(false);
+        setNewMaterialTitle('');
+        setSelectedMaterialFile(null);
+    };
+
+    const openCreateMaterialModal = () => {
+        setNewMaterialTitle('');
+        setSelectedMaterialFile(null);
+        setCreateMaterialModalVisible(true);
+    };
+
+    const getGeneratedMaterialFileName = () => {
+        const baseName = newMaterialTitle.trim();
+        const extension = String(selectedMaterialFile?.name || '').split('.').pop()?.toLowerCase();
+        if (!baseName || !extension || String(selectedMaterialFile?.name || '').indexOf('.') === -1) {
+            return '';
+        }
+        return `${baseName.replace(/\s+/g, '-')}.${extension}`;
     };
 
     const handleCreateBatch = async () => {
@@ -266,10 +328,34 @@ export default function UserDashboard() {
         }
     };
 
+    const fetchMaterials = async (unitId: string) => {
+        setMaterialsLoading(true);
+        try {
+            const response = await getMaterialsByUnit(unitId);
+            if (response.data?.success) {
+                setMaterials(response.data?.data || []);
+            } else {
+                setMaterials([]);
+            }
+        } catch (error) {
+            console.error('Error fetching materials:', error);
+            setMaterials([]);
+        } finally {
+            setMaterialsLoading(false);
+            setRefreshing(false);
+        }
+    };
+
     const handleSubjectPress = (subject: any) => {
         setSelectedSubject(subject);
         setUnits([]);
         fetchUnits(subject._id);
+    };
+
+    const handleUnitPress = (unit: any) => {
+        setSelectedUnit(unit);
+        setMaterials([]);
+        fetchMaterials(unit._id);
     };
 
     const openRenameSubjectModal = (subject: any) => {
@@ -426,6 +512,153 @@ export default function UserDashboard() {
         );
     };
 
+    const pickMaterialFile = async () => {
+        try {
+            const DocumentPicker = require('expo-document-picker');
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+                multiple: false,
+            });
+
+            if (result?.canceled) {
+                return;
+            }
+
+            const file = result?.assets?.[0];
+            if (!file?.uri || !file?.name) {
+                Alert.alert('Error', 'Selected file is invalid.');
+                return;
+            }
+
+            setSelectedMaterialFile(file);
+            const baseName = file.name.includes('.') ? file.name.substring(0, file.name.lastIndexOf('.')) : file.name;
+            if (!newMaterialTitle.trim()) {
+                setNewMaterialTitle(baseName);
+            }
+        } catch (error: any) {
+            const message = String(error?.message || '');
+            if (message.includes('Cannot find module')) {
+                Alert.alert('Missing Dependency', 'Install file picker with: npx expo install expo-document-picker');
+                return;
+            }
+            Alert.alert('Error', 'Unable to pick file.');
+        }
+    };
+
+    const handleCreateMaterial = async () => {
+        if (!selectedUnit?._id || !newMaterialTitle.trim() || !selectedMaterialFile?.name || !selectedMaterialFile?.uri) {
+            Alert.alert('Error', 'Please provide material name and select a file.');
+            return;
+        }
+
+        setCreatingMaterial(true);
+        try {
+            const selectedExtension = String(selectedMaterialFile.name).split('.').pop()?.toLowerCase();
+            if (!selectedExtension) {
+                throw new Error('Could not detect selected file extension');
+            }
+
+            const normalizedName = newMaterialTitle.trim().replace(/\s+/g, '-');
+            const fileNameWithExtension = `${normalizedName}.${selectedExtension}`;
+            const uploadUrlResponse = await generateUploadUrl(fileNameWithExtension, selectedUnit._id);
+            const payload = uploadUrlResponse.data?.data;
+            if (!uploadUrlResponse.data?.success || !payload?.url || !payload?.key || !payload?.fileType) {
+                throw new Error(uploadUrlResponse.data?.message || 'Failed to generate upload URL');
+            }
+
+            const fileResponse = await fetch(selectedMaterialFile.uri);
+            if (!fileResponse.ok) {
+                throw new Error('Could not read selected file');
+            }
+
+            const fileBlob = await fileResponse.blob();
+            const uploadResponse = await fetch(payload.url, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': payload.fileType,
+                },
+                body: fileBlob,
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error('Failed to upload file to storage');
+            }
+
+            const createResponse = await createMaterial(
+                fileNameWithExtension,
+                selectedUnit._id,
+                payload.key,
+                payload.fileType
+            );
+
+            if (!createResponse.data?.success) {
+                throw new Error(createResponse.data?.message || 'Failed to create material record');
+            }
+
+            Alert.alert('Success', 'Material uploaded successfully');
+            setCreateMaterialModalVisible(false);
+            setNewMaterialTitle('');
+            setSelectedMaterialFile(null);
+            fetchMaterials(selectedUnit._id);
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || error.response?.data?.message || 'Failed to upload material');
+        } finally {
+            setCreatingMaterial(false);
+        }
+    };
+
+    const handleDeleteMaterial = async (material: any) => {
+        setDeletingMaterialId(material._id);
+        try {
+            const response = await deleteMaterial(material._id);
+            if (response.data?.success) {
+                setMaterials((prev) => prev.filter((m) => m._id !== material._id));
+                Alert.alert('Deleted', 'Material deleted successfully');
+            } else {
+                Alert.alert('Error', response.data?.message || 'Failed to delete material');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to delete material');
+        } finally {
+            setDeletingMaterialId(null);
+        }
+    };
+
+    const confirmDeleteMaterial = (material: any) => {
+        Alert.alert(
+            'Delete Material',
+            `Are you sure you want to delete "${material.title}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => handleDeleteMaterial(material),
+                },
+            ]
+        );
+    };
+
+    const handleOpenMaterial = async (material: any) => {
+        try {
+            if (material?.accessUrl) {
+                await Linking.openURL(material.accessUrl);
+                return;
+            }
+
+            const response = await getMaterialDownloadUrl(material._id);
+            const url = response.data?.data?.url;
+            if (!url) {
+                throw new Error('Unable to generate download link');
+            }
+
+            await Linking.openURL(url);
+        } catch {
+            Alert.alert('Error', 'Failed to open material');
+        }
+    };
+
     const renderBatchItem = ({ item }: { item: any }) => (
         <TouchableOpacity style={styles.batchCard} onPress={() => handleOpenBatch(item)}>
             <View style={styles.batchIcon}>
@@ -473,13 +706,13 @@ export default function UserDashboard() {
     );
 
     const renderUnitItem = ({ item }: { item: any }) => (
-        <View style={styles.subjectCard}>
+        <TouchableOpacity style={styles.subjectCard} onPress={() => handleUnitPress(item)} activeOpacity={0.9}>
             <View style={styles.subjectIcon}>
                 <Ionicons name="layers-outline" size={20} color="#007AFF" />
             </View>
             <View style={styles.subjectInfo}>
                 <Text style={styles.subjectName}>{item.title}</Text>
-                <Text style={styles.subjectMeta}>Materials view will open here</Text>
+                <Text style={styles.subjectMeta}>Tap to view materials</Text>
             </View>
             <View style={styles.subjectActions}>
                 <TouchableOpacity
@@ -495,6 +728,38 @@ export default function UserDashboard() {
                     disabled={deletingUnitId === item._id}
                 >
                     {deletingUnitId === item._id ? (
+                        <ActivityIndicator size="small" color="#DC2626" />
+                    ) : (
+                        <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                    )}
+                </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </View>
+        </TouchableOpacity>
+    );
+
+    const renderMaterialItem = ({ item }: { item: any }) => (
+        <View style={styles.subjectCard}>
+            <View style={styles.subjectIcon}>
+                <Ionicons name="document-outline" size={20} color="#007AFF" />
+            </View>
+            <View style={styles.subjectInfo}>
+                <Text style={styles.subjectName}>{item.title}</Text>
+                <Text style={styles.subjectMeta}>{item.fileType || 'file'}</Text>
+            </View>
+            <View style={styles.subjectActions}>
+                <TouchableOpacity
+                    style={styles.subjectActionButton}
+                    onPress={() => handleOpenMaterial(item)}
+                >
+                    <Ionicons name="open-outline" size={18} color="#0EA5E9" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.subjectActionButton}
+                    onPress={() => confirmDeleteMaterial(item)}
+                    disabled={deletingMaterialId === item._id}
+                >
+                    {deletingMaterialId === item._id ? (
                         <ActivityIndicator size="small" color="#DC2626" />
                     ) : (
                         <Ionicons name="trash-outline" size={18} color="#DC2626" />
@@ -528,24 +793,31 @@ export default function UserDashboard() {
                 <View style={styles.backRow}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={selectedSubject ? handleBackToSubjects : handleBackToHome}
+                        onPress={selectedUnit ? handleBackToUnits : selectedSubject ? handleBackToSubjects : handleBackToHome}
                     >
                         <Ionicons name="arrow-back" size={18} color="#1E293B" />
-                        <Text style={styles.backText}>{selectedSubject ? 'Subjects' : 'Home'}</Text>
+                        <Text style={styles.backText}>{selectedUnit ? 'Units' : selectedSubject ? 'Subjects' : 'Home'}</Text>
                     </TouchableOpacity>
                 </View>
             ) : null}
 
             <View style={styles.contentHeader}>
                 <Text style={styles.sectionTitle}>
-                    {selectedSubject
+                    {selectedUnit
+                        ? `${selectedUnit.title} Materials`
+                        : selectedSubject
                         ? `${selectedSubject.name} Units`
                         : selectedBatch
                             ? `${selectedBatch.name} Subjects`
                             : 'Your Batches'}
                 </Text>
 
-                {selectedSubject ? (
+                {selectedUnit ? (
+                    <TouchableOpacity style={styles.createButton} onPress={openCreateMaterialModal}>
+                        <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+                        <Text style={styles.createButtonText}>Upload</Text>
+                    </TouchableOpacity>
+                ) : selectedSubject ? (
                     <TouchableOpacity style={styles.createButton} onPress={() => setCreateUnitModalVisible(true)}>
                         <Ionicons name="add" size={18} color="#FFF" />
                         <Text style={styles.createButtonText}>Add Unit</Text>
@@ -563,14 +835,14 @@ export default function UserDashboard() {
                 )}
             </View>
 
-            {(selectedBatch && subjectsLoading && !selectedSubject) || (selectedSubject && unitsLoading) ? (
+            {(selectedBatch && subjectsLoading && !selectedSubject) || (selectedSubject && unitsLoading && !selectedUnit) || (selectedUnit && materialsLoading) ? (
                 <View style={styles.loadingSubjectsContainer}>
                     <ActivityIndicator size="large" color="#007AFF" />
                 </View>
             ) : (
                 <FlatList
-                    data={selectedSubject ? units : selectedBatch ? subjects : batches}
-                    renderItem={selectedSubject ? renderUnitItem : selectedBatch ? renderSubjectItem : renderBatchItem}
+                    data={selectedUnit ? materials : selectedSubject ? units : selectedBatch ? subjects : batches}
+                    renderItem={selectedUnit ? renderMaterialItem : selectedSubject ? renderUnitItem : selectedBatch ? renderSubjectItem : renderBatchItem}
                     keyExtractor={(item) => item._id}
                     contentContainerStyle={styles.listContent}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -579,7 +851,9 @@ export default function UserDashboard() {
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyText}>
                                 {selectedBatch
-                                    ? selectedSubject
+                                    ? selectedUnit
+                                        ? 'No materials found in this unit.'
+                                        : selectedSubject
                                         ? 'No units found in this subject.'
                                         : 'No subjects found in this batch.'
                                     : 'No batches found. Create one to get started.'}
@@ -833,6 +1107,72 @@ export default function UserDashboard() {
                     </View>
                 </View>
             </Modal>
+
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={createMaterialModalVisible}
+                onRequestClose={() => setCreateMaterialModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Upload Material</Text>
+                            <TouchableOpacity onPress={() => setCreateMaterialModalVisible(false)}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>Material Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="e.g. chapter-1-notes"
+                                value={newMaterialTitle}
+                                onChangeText={setNewMaterialTitle}
+                            />
+
+                            <Text style={[styles.label, styles.extraFieldLabel]}>Selected File</Text>
+                            <TouchableOpacity style={styles.selectFileButton} onPress={pickMaterialFile}>
+                                <Ionicons name="document-attach-outline" size={18} color="#007AFF" />
+                                <Text style={styles.selectFileButtonText}>
+                                    {selectedMaterialFile?.name || 'Choose Material File'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <Text style={[styles.label, styles.extraFieldLabel]}>Generated File Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Auto Fill"
+                                value={getGeneratedMaterialFileName()}
+                                editable={false}
+                                autoCapitalize="none"
+                            />
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={() => setCreateMaterialModalVisible(false)}
+                                disabled={creatingMaterial}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={handleCreateMaterial}
+                                disabled={creatingMaterial}
+                            >
+                                {creatingMaterial ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Upload</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1047,6 +1387,9 @@ const styles = StyleSheet.create({
         color: '#64748B',
         marginBottom: 8,
     },
+    extraFieldLabel: {
+        marginTop: 12,
+    },
     input: {
         backgroundColor: '#F8FAFC',
         borderWidth: 1,
@@ -1055,6 +1398,23 @@ const styles = StyleSheet.create({
         padding: 16,
         fontSize: 16,
         color: '#1E293B',
+    },
+    selectFileButton: {
+        backgroundColor: '#EFF6FF',
+        borderWidth: 1,
+        borderColor: '#BFDBFE',
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    selectFileButtonText: {
+        flex: 1,
+        color: '#1E3A8A',
+        fontSize: 14,
+        fontWeight: '600',
     },
     modalActions: {
         flexDirection: 'row',

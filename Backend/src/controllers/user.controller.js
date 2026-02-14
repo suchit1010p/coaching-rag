@@ -908,40 +908,6 @@ const deleteUnitFromSubject = asyncHandler(async (req, res) => {
         )
 })
 
-// add material to unit
-const addMaterialToUnit = asyncHandler(async (req, res) => {
-    // code here
-})
-
-// get all materials of unit
-const getAllMaterialsOfUnit = asyncHandler(async (req, res) => {
-    const unitId = req.query?.unitId || req.body?.unitId
-
-    // checking----------------
-    if (!unitId || unitId.trim() === "") {
-        throw new ApiError(400, "Unit ID is required")
-    }
-
-    const unit = await Unit.findById(unitId)
-
-    if (!unit) {
-        throw new ApiError(404, "Unit not found")
-    }
-
-    const materials = await Material.aggregate([{ $match: { unit: unit._id } }])
-
-    // responce------------------
-    return res
-        .status(200)
-        .json(
-            new ApiResponse(200, materials, "Materials of unit fetched successfully")
-        )
-})
-
-// delete material from unit
-const deleteMaterialFromUnit = asyncHandler(async (req, res) => {
-    // code here
-})
 
 
 export {
@@ -976,16 +942,12 @@ export {
     changeUnitName,
     deleteUnitFromSubject,
 
-    // material functions
-    addMaterialToUnit,
-    deleteMaterialFromUnit,
-
     // get functions
     getAllStudents,
     getAllBatches,
     getAllStudentsOfBatch,
     getAllSubjectsOfBatch,
     getAllStudentsOfSubject,
-    getAllUnitsOfSubject,
-    getAllMaterialsOfUnit
+    getAllUnitsOfSubject
+    
 }
