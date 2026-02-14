@@ -13,6 +13,27 @@ import jwt from "jsonwebtoken";
 
 const getCookieOptions = () => {
     const isProduction = process.env.NODE_ENV === "production";
+    const accessTokenCookieDays = Number(process.env.STUDENT_ACCESS_TOKEN_COOKIE_DAYS || process.env.ACCESS_TOKEN_COOKIE_DAYS || 1);
+    const refreshTokenCookieDays = Number(process.env.STUDENT_REFRESH_TOKEN_COOKIE_DAYS || process.env.REFRESH_TOKEN_COOKIE_DAYS || 90);
+
+    return {
+        access: {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
+            maxAge: accessTokenCookieDays * 24 * 60 * 60 * 1000
+        },
+        refresh: {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
+            maxAge: refreshTokenCookieDays * 24 * 60 * 60 * 1000
+        }
+    };
+};
+
+const getClearCookieOptions = () => {
+    const isProduction = process.env.NODE_ENV === "production";
 
     return {
         httpOnly: true,
@@ -25,14 +46,20 @@ const getCookieOptions = () => {
 const generateStudentTokens = async (studentId) => {
     try {
         const student = await Student.findById(studentId);
+        if (!student) {
+            throw new ApiError(404, "Student not found");
+        }
         const accessToken = student.generateAccessToken();
         const refreshToken = student.generateRefreshToken();
 
-        // Note: Students don't store refresh tokens in DB for now
-        // You can add refreshToken field to student model if needed
+        student.refreshToken = refreshToken;
+        await student.save({ validateBeforeSave: false });
 
         return { accessToken, refreshToken };
     } catch (error) {
+        if (error instanceof ApiError) {
+            throw error;
+        }
         throw new ApiError(500, "Token generation failed");
     }
 };
@@ -62,7 +89,7 @@ const loginStudent = asyncHandler(async (req, res) => {
     }
 
     const loggedInStudent = await Student.findById(student._id)
-        .select("-password")
+        .select("-password -refreshToken")
         .populate('batch', 'name');
 
     const { accessToken, refreshToken } = await generateStudentTokens(student._id);
@@ -71,8 +98,8 @@ const loginStudent = asyncHandler(async (req, res) => {
 
     return res
         .status(200)
-        .cookie("studentAccessToken", accessToken, options)
-        .cookie("studentRefreshToken", refreshToken, options)
+        .cookie("studentAccessToken", accessToken, options.access)
+        .cookie("studentRefreshToken", refreshToken, options.refresh)
         .json(
             new ApiResponse(
                 200,
@@ -88,7 +115,19 @@ const loginStudent = asyncHandler(async (req, res) => {
 
 // Student Logout
 const logoutStudent = asyncHandler(async (req, res) => {
-    const options = getCookieOptions();
+    await Student.findByIdAndUpdate(
+        req.student._id,
+        {
+            $set: {
+                refreshToken: null
+            }
+        },
+        {
+            new: true
+        }
+    );
+
+    const options = getClearCookieOptions();
 
     return res
         .status(200)
@@ -97,10 +136,54 @@ const logoutStudent = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "Student logged out successfully"));
 });
 
+const refreshStudentAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.studentRefreshToken || req.body.refreshToken;
+    const studentRefreshSecret =
+        process.env.STUDENT_REFRESH_TOKEN_SECRET || process.env.REFRESH_TOKEN_SECRET;
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, studentRefreshSecret);
+        const student = await Student.findById(decodedToken?._id).select("+refreshToken");
+
+        if (!student) {
+            throw new ApiError(401, "Invalid refresh token");
+        }
+
+        if (incomingRefreshToken !== student.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used");
+        }
+
+        const { accessToken, refreshToken } = await generateStudentTokens(student._id);
+        const safeStudent = await Student.findById(student._id)
+            .select("-password -refreshToken")
+            .populate("batch", "name");
+
+        const options = getCookieOptions();
+
+        return res
+            .status(200)
+            .cookie("studentAccessToken", accessToken, options.access)
+            .cookie("studentRefreshToken", refreshToken, options.refresh)
+            .json(
+                new ApiResponse(
+                    200,
+                    { student: safeStudent, accessToken, refreshToken },
+                    "Student access token refreshed successfully"
+                )
+            );
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Invalid refresh token");
+    }
+});
+
 // Get Student Profile
 const getStudentProfile = asyncHandler(async (req, res) => {
     const student = await Student.findById(req.student._id)
-        .select("-password")
+        .select("-password -refreshToken")
         .populate('batch', 'name');
 
     if (!student) {
@@ -304,6 +387,7 @@ export {
     verifyStudentEmail,
     loginStudent,
     logoutStudent,
+    refreshStudentAccessToken,
     getStudentProfile,
     getStudentBatch,
     getStudentSubjects,

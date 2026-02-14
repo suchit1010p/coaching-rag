@@ -18,7 +18,7 @@ export const verifyStudentJWT = asyncHandler(async (req, _, next) => {
         const decodedToken = jwt.verify(token, studentAccessSecret);
 
         const student = await Student.findById(decodedToken?._id)
-            .select("-password")
+            .select("-password -refreshToken")
             .populate('batch', 'name');
 
         if (!student) {

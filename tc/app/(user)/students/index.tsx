@@ -9,18 +9,55 @@ import {
     ActivityIndicator,
     TextInput,
     Alert,
+    Modal,
+    ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { deleteStudent as deleteStudentApi, getAllBatches, getAllStudents } from '../../../services/api';
+import {
+    addStudentToSubject,
+    changeStudentBatch as changeStudentBatchApi,
+    deleteStudent as deleteStudentApi,
+    getAllBatches,
+    getAllStudents,
+    getAllSubjectsOfBatch,
+    registerStudent as registerStudentApi,
+} from '../../../services/api';
 
 export default function StudentsScreen() {
     const [students, setStudents] = useState<any[]>([]);
+    const [batches, setBatches] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchText, setSearchText] = useState('');
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+    const [changingBatchStudentId, setChangingBatchStudentId] = useState<string | null>(null);
+    const [registerModalVisible, setRegisterModalVisible] = useState(false);
+    const [registeringStudent, setRegisteringStudent] = useState(false);
+    const [subjectLoading, setSubjectLoading] = useState(false);
+    const [batchMenuOpen, setBatchMenuOpen] = useState(false);
+    const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
+    const [changeBatchModalVisible, setChangeBatchModalVisible] = useState(false);
+    const [changeBatchMenuOpen, setChangeBatchMenuOpen] = useState(false);
+    const [changeSubjectMenuOpen, setChangeSubjectMenuOpen] = useState(false);
+    const [changeBatchSubjects, setChangeBatchSubjects] = useState<any[]>([]);
+    const [changeBatchSubjectLoading, setChangeBatchSubjectLoading] = useState(false);
+    const [studentForBatchChange, setStudentForBatchChange] = useState<any | null>(null);
+    const [newBatchIdForStudent, setNewBatchIdForStudent] = useState('');
+    const [newSubjectIdForStudent, setNewSubjectIdForStudent] = useState('');
+    const [form, setForm] = useState({
+        rollNumber: '',
+        name: '',
+        mobile: '',
+        email: '',
+        password: '',
+        parentName: '',
+        parentMobile: '',
+        batchId: '',
+        subjectId: '',
+    });
 
     const fetchStudents = useCallback(async () => {
         try {
@@ -36,6 +73,8 @@ export default function StudentsScreen() {
                 acc[batch._id] = batch.name;
                 return acc;
             }, {});
+
+            setBatches(batchesData);
 
             const normalizedStudents = studentsData.map((student: any) => {
                 const isBatchObject = typeof student.batch === 'object' && student.batch !== null;
@@ -71,6 +110,114 @@ export default function StudentsScreen() {
         setRefreshing(true);
         fetchStudents();
     }, [fetchStudents]);
+
+    const resetRegisterForm = () => {
+        setForm({
+            rollNumber: '',
+            name: '',
+            mobile: '',
+            email: '',
+            password: '',
+            parentName: '',
+            parentMobile: '',
+            batchId: '',
+            subjectId: '',
+        });
+        setSubjects([]);
+        setBatchMenuOpen(false);
+        setSubjectMenuOpen(false);
+    };
+
+    const handleOpenRegisterModal = () => {
+        resetRegisterForm();
+        setRegisterModalVisible(true);
+    };
+
+    const fetchSubjectsForBatch = async (batchId: string) => {
+        setSubjectLoading(true);
+        try {
+            const response = await getAllSubjectsOfBatch(batchId);
+            if (response.data?.success) {
+                setSubjects(response.data?.data || []);
+            } else {
+                setSubjects([]);
+            }
+        } catch (error) {
+            console.error('Error fetching subjects:', error);
+            setSubjects([]);
+            Alert.alert('Error', 'Failed to load subjects for selected batch.');
+        } finally {
+            setSubjectLoading(false);
+        }
+    };
+
+    const updateField = (key: string, value: string) => {
+        setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const handleSelectBatch = async (batchId: string) => {
+        setForm((prev) => ({ ...prev, batchId, subjectId: '' }));
+        setBatchMenuOpen(false);
+        setSubjectMenuOpen(false);
+        await fetchSubjectsForBatch(batchId);
+    };
+
+    const handleSelectSubject = (subjectId: string) => {
+        setForm((prev) => ({ ...prev, subjectId }));
+        setSubjectMenuOpen(false);
+    };
+
+    const handleRegisterStudent = async () => {
+        if (
+            !form.rollNumber.trim() ||
+            !form.name.trim() ||
+            !form.mobile.trim() ||
+            !form.email.trim() ||
+            !form.password.trim() ||
+            !form.parentName.trim() ||
+            !form.parentMobile.trim() ||
+            !form.batchId ||
+            !form.subjectId
+        ) {
+            Alert.alert('Error', 'Please fill all fields and select batch/subject.');
+            return;
+        }
+
+        setRegisteringStudent(true);
+
+        try {
+            const payload = {
+                rollNumber: Number(form.rollNumber),
+                name: form.name.trim(),
+                mobile: form.mobile.trim(),
+                email: form.email.trim(),
+                password: form.password,
+                parentName: form.parentName.trim(),
+                parentMobile: form.parentMobile.trim(),
+                batchId: form.batchId,
+            };
+
+            const registerResponse = await registerStudentApi(payload);
+            if (!registerResponse.data?.success || !registerResponse.data?.data?._id) {
+                throw new Error(registerResponse.data?.message || 'Failed to register student.');
+            }
+
+            const studentId = registerResponse.data.data._id;
+            const enrollResponse = await addStudentToSubject(form.subjectId, studentId);
+            if (!enrollResponse.data?.success) {
+                throw new Error(enrollResponse.data?.message || 'Student registered but subject enrollment failed.');
+            }
+
+            Alert.alert('Success', 'Student registered and added to subject successfully.');
+            setRegisterModalVisible(false);
+            resetRegisterForm();
+            fetchStudents();
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to register student.');
+        } finally {
+            setRegisteringStudent(false);
+        }
+    };
 
     const filteredStudents = useMemo(() => {
         const query = searchText.trim().toLowerCase();
@@ -124,9 +271,93 @@ export default function StudentsScreen() {
         );
     };
 
+    const openChangeBatchModal = (student: any) => {
+        const currentBatchId = student?.batch?._id || student?.batch || '';
+        setStudentForBatchChange(student);
+        setNewBatchIdForStudent(currentBatchId);
+        setNewSubjectIdForStudent('');
+        setChangeBatchSubjects([]);
+        setChangeBatchMenuOpen(false);
+        setChangeSubjectMenuOpen(false);
+        setChangeBatchModalVisible(true);
+        if (currentBatchId) {
+            void fetchChangeBatchSubjects(currentBatchId);
+        }
+    };
+
+    const closeChangeBatchModal = () => {
+        setChangeBatchModalVisible(false);
+        setChangeBatchMenuOpen(false);
+        setChangeSubjectMenuOpen(false);
+        setStudentForBatchChange(null);
+        setNewBatchIdForStudent('');
+        setNewSubjectIdForStudent('');
+        setChangeBatchSubjects([]);
+    };
+
+    const fetchChangeBatchSubjects = async (batchId: string) => {
+        setChangeBatchSubjectLoading(true);
+        try {
+            const response = await getAllSubjectsOfBatch(batchId);
+            if (response.data?.success) {
+                setChangeBatchSubjects(response.data?.data || []);
+            } else {
+                setChangeBatchSubjects([]);
+            }
+        } catch (error) {
+            console.error('Error fetching subjects for batch change:', error);
+            setChangeBatchSubjects([]);
+            Alert.alert('Error', 'Failed to load subjects for selected batch.');
+        } finally {
+            setChangeBatchSubjectLoading(false);
+        }
+    };
+
+    const handleChangeBatch = async () => {
+        if (!studentForBatchChange?._id || !newBatchIdForStudent || !newSubjectIdForStudent) {
+            Alert.alert('Error', 'Please select both batch and subject.');
+            return;
+        }
+
+        setChangingBatchStudentId(studentForBatchChange._id);
+        try {
+            const response = await changeStudentBatchApi(
+                studentForBatchChange._id,
+                newBatchIdForStudent,
+                newSubjectIdForStudent
+            );
+            if (!response.data?.success) {
+                throw new Error(response.data?.message || 'Failed to change batch.');
+            }
+
+            const selectedBatch = batches.find((batch) => batch._id === newBatchIdForStudent);
+
+            setStudents((prev) =>
+                prev.map((student) =>
+                    student._id === studentForBatchChange._id
+                        ? {
+                            ...student,
+                            batch: newBatchIdForStudent,
+                            batchName: selectedBatch?.name || student.batchName,
+                        }
+                        : student
+                )
+            );
+
+            closeChangeBatchModal();
+            setSelectedStudentId(null);
+            Alert.alert('Success', 'Student batch and subject updated successfully.');
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to change student batch/subject.');
+        } finally {
+            setChangingBatchStudentId(null);
+        }
+    };
+
     const renderStudentItem = ({ item }: { item: any }) => {
         const isSelected = selectedStudentId === item._id;
         const isDeleting = deletingStudentId === item._id;
+        const isChangingBatch = changingBatchStudentId === item._id;
 
         return (
             <TouchableOpacity
@@ -144,20 +375,36 @@ export default function StudentsScreen() {
                         <Text style={styles.batchText}>Batch: {item.batchName}</Text>
 
                         {isSelected ? (
-                            <TouchableOpacity
-                                style={styles.deleteButton}
-                                onPress={() => confirmDeleteStudent(item)}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <ActivityIndicator size="small" color="#FFFFFF" />
-                                ) : (
-                                    <>
-                                        <Ionicons name="trash" size={14} color="#FFFFFF" />
-                                        <Text style={styles.deleteButtonText}>Delete Student</Text>
-                                    </>
-                                )}
-                            </TouchableOpacity>
+                            <View style={styles.actionRow}>
+                                <TouchableOpacity
+                                    style={styles.changeBatchButton}
+                                    onPress={() => openChangeBatchModal(item)}
+                                    disabled={isChangingBatch}
+                                >
+                                    {isChangingBatch ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="swap-horizontal" size={14} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Change Batch</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.deleteButton}
+                                    onPress={() => confirmDeleteStudent(item)}
+                                    disabled={isDeleting}
+                                >
+                                    {isDeleting ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                    ) : (
+                                        <>
+                                            <Ionicons name="trash" size={14} color="#FFFFFF" />
+                                            <Text style={styles.actionButtonText}>Delete Student</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
                         ) : null}
                     </View>
                     <View style={styles.rightWrap}>
@@ -191,7 +438,11 @@ export default function StudentsScreen() {
                         {filteredStudents.length} of {students.length} students
                     </Text>
                 </View>
-                <TouchableOpacity style={styles.registerBtn} activeOpacity={0.85}>
+                <TouchableOpacity
+                    style={styles.registerBtn}
+                    activeOpacity={0.85}
+                    onPress={handleOpenRegisterModal}
+                >
                     <Ionicons name="person-add" size={16} color="#FFFFFF" />
                     <Text style={styles.registerBtnText}>Register</Text>
                 </TouchableOpacity>
@@ -228,6 +479,326 @@ export default function StudentsScreen() {
                     </View>
                 }
             />
+
+            <Modal
+                animationType="slide"
+                transparent
+                visible={registerModalVisible}
+                onRequestClose={() => setRegisterModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Register Student</Text>
+                            <TouchableOpacity onPress={() => setRegisterModalVisible(false)}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                            <Text style={styles.label}>Roll Number</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.rollNumber}
+                                onChangeText={(value) => updateField('rollNumber', value)}
+                                keyboardType="number-pad"
+                                placeholder="Enter roll number"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Student Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.name}
+                                onChangeText={(value) => updateField('name', value)}
+                                placeholder="Enter student name"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.mobile}
+                                onChangeText={(value) => updateField('mobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter mobile number"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Email</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.email}
+                                onChangeText={(value) => updateField('email', value)}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                placeholder="Enter email"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Password</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.password}
+                                onChangeText={(value) => updateField('password', value)}
+                                secureTextEntry
+                                placeholder="Enter password"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Parent Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.parentName}
+                                onChangeText={(value) => updateField('parentName', value)}
+                                placeholder="Enter parent name"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Parent Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.parentMobile}
+                                onChangeText={(value) => updateField('parentMobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter parent mobile"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Batch</Text>
+                            <TouchableOpacity
+                                style={styles.selectInput}
+                                onPress={() => {
+                                    setBatchMenuOpen((prev) => !prev);
+                                    setSubjectMenuOpen(false);
+                                }}
+                            >
+                                <Text style={form.batchId ? styles.selectText : styles.placeholderText}>
+                                    {form.batchId
+                                        ? batches.find((batch) => batch._id === form.batchId)?.name || 'Select batch'
+                                        : 'Select batch'}
+                                </Text>
+                                <Ionicons
+                                    name={batchMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color="#64748B"
+                                />
+                            </TouchableOpacity>
+                            {batchMenuOpen ? (
+                                <View style={styles.selectMenu}>
+                                    {batches.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No batches found</Text>
+                                    ) : (
+                                        batches.map((batch) => (
+                                            <TouchableOpacity
+                                                key={batch._id}
+                                                style={styles.selectItem}
+                                                onPress={() => handleSelectBatch(batch._id)}
+                                            >
+                                                <Text style={styles.selectItemText}>{batch.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            ) : null}
+
+                            <Text style={styles.label}>Subject</Text>
+                            <TouchableOpacity
+                                style={styles.selectInput}
+                                disabled={!form.batchId || subjectLoading}
+                                onPress={() => {
+                                    if (form.batchId && !subjectLoading) {
+                                        setSubjectMenuOpen((prev) => !prev);
+                                        setBatchMenuOpen(false);
+                                    }
+                                }}
+                            >
+                                <Text style={form.subjectId ? styles.selectText : styles.placeholderText}>
+                                    {subjectLoading
+                                        ? 'Loading subjects...'
+                                        : form.subjectId
+                                            ? subjects.find((subject) => subject._id === form.subjectId)?.name || 'Select subject'
+                                            : 'Select subject'}
+                                </Text>
+                                <Ionicons
+                                    name={subjectMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color="#64748B"
+                                />
+                            </TouchableOpacity>
+                            {subjectMenuOpen ? (
+                                <View style={styles.selectMenu}>
+                                    {subjects.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No subjects found in this batch</Text>
+                                    ) : (
+                                        subjects.map((subject) => (
+                                            <TouchableOpacity
+                                                key={subject._id}
+                                                style={styles.selectItem}
+                                                onPress={() => handleSelectSubject(subject._id)}
+                                            >
+                                                <Text style={styles.selectItemText}>{subject.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            ) : null}
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={() => setRegisterModalVisible(false)}
+                                disabled={registeringStudent}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={handleRegisterStudent}
+                                disabled={registeringStudent}
+                            >
+                                {registeringStudent ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Register</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                animationType="slide"
+                transparent
+                visible={changeBatchModalVisible}
+                onRequestClose={closeChangeBatchModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Change Batch</Text>
+                            <TouchableOpacity onPress={closeChangeBatchModal}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.label}>Student</Text>
+                        <Text style={styles.studentNameInModal}>{studentForBatchChange?.name || '-'}</Text>
+
+                        <Text style={styles.label}>Select New Batch</Text>
+                            <TouchableOpacity
+                                style={styles.selectInput}
+                                onPress={() => setChangeBatchMenuOpen((prev) => !prev)}
+                            >
+                            <Text style={newBatchIdForStudent ? styles.selectText : styles.placeholderText}>
+                                {newBatchIdForStudent
+                                    ? batches.find((batch) => batch._id === newBatchIdForStudent)?.name || 'Select batch'
+                                    : 'Select batch'}
+                            </Text>
+                            <Ionicons
+                                name={changeBatchMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                size={16}
+                                color="#64748B"
+                            />
+                        </TouchableOpacity>
+                        {changeBatchMenuOpen ? (
+                            <ScrollView style={styles.batchMenuScroll} nestedScrollEnabled>
+                                <View style={styles.selectMenu}>
+                                    {batches.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No batches found</Text>
+                                    ) : (
+                                        batches.map((batch) => (
+                                            <TouchableOpacity
+                                                key={batch._id}
+                                                style={styles.selectItem}
+                                                onPress={async () => {
+                                                    setNewBatchIdForStudent(batch._id);
+                                                    setNewSubjectIdForStudent('');
+                                                    setChangeBatchMenuOpen(false);
+                                                    setChangeSubjectMenuOpen(false);
+                                                    await fetchChangeBatchSubjects(batch._id);
+                                                }}
+                                            >
+                                                <Text style={styles.selectItemText}>{batch.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            </ScrollView>
+                        ) : null}
+
+                        <Text style={styles.label}>Select Subject</Text>
+                        <TouchableOpacity
+                            style={styles.selectInput}
+                            disabled={!newBatchIdForStudent || changeBatchSubjectLoading}
+                            onPress={() => {
+                                if (newBatchIdForStudent && !changeBatchSubjectLoading) {
+                                    setChangeSubjectMenuOpen((prev) => !prev);
+                                    setChangeBatchMenuOpen(false);
+                                }
+                            }}
+                        >
+                            <Text style={newSubjectIdForStudent ? styles.selectText : styles.placeholderText}>
+                                {changeBatchSubjectLoading
+                                    ? 'Loading subjects...'
+                                    : newSubjectIdForStudent
+                                        ? changeBatchSubjects.find((subject) => subject._id === newSubjectIdForStudent)?.name || 'Select subject'
+                                        : 'Select subject'}
+                            </Text>
+                            <Ionicons
+                                name={changeSubjectMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                size={16}
+                                color="#64748B"
+                            />
+                        </TouchableOpacity>
+                        {changeSubjectMenuOpen ? (
+                            <ScrollView style={styles.batchMenuScroll} nestedScrollEnabled>
+                                <View style={styles.selectMenu}>
+                                    {changeBatchSubjects.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No subjects found in this batch</Text>
+                                    ) : (
+                                        changeBatchSubjects.map((subject) => (
+                                            <TouchableOpacity
+                                                key={subject._id}
+                                                style={styles.selectItem}
+                                                onPress={() => {
+                                                    setNewSubjectIdForStudent(subject._id);
+                                                    setChangeSubjectMenuOpen(false);
+                                                }}
+                                            >
+                                                <Text style={styles.selectItemText}>{subject.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            </ScrollView>
+                        ) : null}
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={closeChangeBatchModal}
+                                disabled={Boolean(changingBatchStudentId)}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={handleChangeBatch}
+                                disabled={Boolean(changingBatchStudentId)}
+                            >
+                                {Boolean(changingBatchStudentId) ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Update Batch</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -359,6 +930,24 @@ const styles = StyleSheet.create({
         alignItems: 'flex-end',
         gap: 6,
     },
+    actionRow: {
+        marginTop: 10,
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        gap: 8,
+        width: '100%',
+    },
+    changeBatchButton: {
+        backgroundColor: '#2563EB',
+        borderRadius: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        width: '100%',
+    },
     deleteButton: {
         backgroundColor: '#DC2626',
         borderRadius: 10,
@@ -368,10 +957,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 6,
-        marginTop: 10,
-        alignSelf: 'flex-start',
+        width: '100%',
     },
-    deleteButtonText: {
+    actionButtonText: {
         color: '#FFFFFF',
         fontSize: 13,
         fontWeight: '700',
@@ -383,5 +971,134 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 16,
         color: '#94A3B8',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 20,
+        paddingTop: 18,
+        paddingBottom: 20,
+        maxHeight: '92%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+    modalBody: {
+        paddingBottom: 6,
+    },
+    label: {
+        marginTop: 10,
+        marginBottom: 6,
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#334155',
+    },
+    input: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        fontSize: 14,
+        color: '#0F172A',
+    },
+    selectInput: {
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    selectText: {
+        color: '#0F172A',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    placeholderText: {
+        color: '#94A3B8',
+        fontSize: 14,
+    },
+    selectMenu: {
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        marginTop: 6,
+        overflow: 'hidden',
+    },
+    selectItem: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: '#F8FAFC',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+    },
+    selectItemText: {
+        fontSize: 14,
+        color: '#1E293B',
+        fontWeight: '600',
+    },
+    selectEmpty: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        color: '#94A3B8',
+        fontSize: 13,
+    },
+    batchMenuScroll: {
+        maxHeight: 220,
+        marginTop: 6,
+    },
+    studentNameInModal: {
+        fontSize: 14,
+        color: '#0F172A',
+        fontWeight: '700',
+        marginBottom: 10,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 14,
+    },
+    modalButton: {
+        flex: 1,
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cancelButton: {
+        backgroundColor: '#E2E8F0',
+    },
+    saveButton: {
+        backgroundColor: '#007AFF',
+    },
+    cancelButtonText: {
+        color: '#334155',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    saveButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
     },
 });

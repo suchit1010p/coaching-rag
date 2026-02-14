@@ -14,7 +14,7 @@ interface AuthContextType {
     user: any | null;
     role: Role;
     isLoading: boolean;
-    login: (roleType: Role, userData: any, token: string) => Promise<void>;
+    login: (roleType: Role, userData: any, accessToken: string, refreshToken: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -30,6 +30,7 @@ export const useAuth = () => {
 
 const clearStoredAuth = async () => {
     await SecureStore.deleteItemAsync("token");
+    await SecureStore.deleteItemAsync("refreshToken");
     await SecureStore.deleteItemAsync("role");
     await SecureStore.deleteItemAsync("user");
 };
@@ -47,9 +48,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const bootstrapAuth = async () => {
         try {
             const token = await SecureStore.getItemAsync("token");
+            const refreshToken = await SecureStore.getItemAsync("refreshToken");
             const savedRole = await SecureStore.getItemAsync("role");
 
-            if (!token || !savedRole) {
+            if ((!token && !refreshToken) || !savedRole) {
                 return;
             }
 
@@ -82,15 +84,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const login = async (roleType: Role, userData: any, token: string) => {
-        if (!roleType || !token) {
+    const login = async (roleType: Role, userData: any, accessToken: string, refreshToken: string) => {
+        if (!roleType || !accessToken || !refreshToken) {
             throw new Error("Invalid login payload");
         }
 
         setRole(roleType);
         setUser(userData);
 
-        await SecureStore.setItemAsync("token", token);
+        await SecureStore.setItemAsync("token", accessToken);
+        await SecureStore.setItemAsync("refreshToken", refreshToken);
         await SecureStore.setItemAsync("role", roleType);
         await SecureStore.setItemAsync("user", JSON.stringify(userData));
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
     loginStudent,
     logoutStudent,
+    refreshStudentAccessToken,
     getStudentProfile,
     getStudentBatch,
     getStudentSubjects,
@@ -17,6 +18,7 @@ const router = Router();
 
 // Public routes (no authentication required)
 router.route("/login").post(loginStudent);
+router.route("/refresh-token").post(refreshStudentAccessToken);
 router.route("/verify-email/:token").get(verifyStudentEmail);
 
 // Protected routes (student must be logged in)

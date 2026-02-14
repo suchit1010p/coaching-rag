@@ -13,23 +13,104 @@ const api = axios.create({
     timeout: 15000
 });
 
+const ACCESS_TOKEN_KEY = "token";
+const REFRESH_TOKEN_KEY = "refreshToken";
+const ROLE_KEY = "role";
+
+type AuthRole = "student" | "user";
+
+const clearStoredAuth = async () => {
+    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(ROLE_KEY);
+    await SecureStore.deleteItemAsync("user");
+};
+
+const getRefreshEndpoint = (role: AuthRole) => {
+    return role === "student" ? "/students/refresh-token" : "/users/refresh-token";
+};
+
 api.interceptors.request.use(async (config) => {
-    const token = await SecureStore.getItemAsync("token");
+    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
 });
 
+let refreshPromise: Promise<string> | null = null;
+
+const refreshAuthToken = async (): Promise<string> => {
+    const role = await SecureStore.getItemAsync(ROLE_KEY);
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+
+    if ((role !== "student" && role !== "user") || !refreshToken) {
+        throw new Error("No refresh session available");
+    }
+
+    const response = await api.post(getRefreshEndpoint(role), { refreshToken });
+
+    if (!response?.data?.success || !response?.data?.data?.accessToken) {
+        throw new Error(response?.data?.message || "Token refresh failed");
+    }
+
+    const newAccessToken = response.data.data.accessToken as string;
+    const newRefreshToken = (response.data.data.refreshToken as string | undefined) || refreshToken;
+
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, newAccessToken);
+    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, newRefreshToken);
+
+    return newAccessToken;
+};
+
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const status = error?.response?.status;
+        const originalRequest = error?.config as any;
+        const requestUrl = String(originalRequest?.url || "");
+        const isRefreshCall =
+            requestUrl.includes("/users/refresh-token") ||
+            requestUrl.includes("/users/refreshToken") ||
+            requestUrl.includes("/students/refresh-token");
+
+        if (status !== 401 || !originalRequest || originalRequest._retry || isRefreshCall) {
+            return Promise.reject(error);
+        }
+
+        originalRequest._retry = true;
+
+        try {
+            if (!refreshPromise) {
+                refreshPromise = refreshAuthToken().finally(() => {
+                    refreshPromise = null;
+                });
+            }
+
+            const newAccessToken = await refreshPromise;
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+            return api(originalRequest);
+        } catch (refreshError) {
+            await clearStoredAuth();
+            return Promise.reject(refreshError);
+        }
+    }
+);
+
 // --- Auth & Profile ---
 export const loginStudent = (mobile: string, password: string) =>
     api.post("/students/login", { mobile, password });
+export const refreshStudentToken = (refreshToken: string) =>
+    api.post("/students/refresh-token", { refreshToken });
 
 export const logoutStudent = () => api.post("/students/logout");
 export const getStudentProfile = () => api.get("/students/profile");
 
 export const loginUser = (mobile: string, password: string) =>
     api.post("/users/login", { mobile, password });
+export const refreshUserToken = (refreshToken: string) =>
+    api.post("/users/refresh-token", { refreshToken });
 
 export const logoutUser = () => api.post("/users/logout");
 export const getUserProfile = () => api.get("/users/profile");
@@ -45,8 +126,8 @@ export const deleteBatch = (batchId: string) => api.delete("/users/delete/batch"
 export const registerStudent = (studentData: any) => api.post("/users/registerStudent", studentData);
 export const getAllStudents = () => api.get("/users/get/all/students");
 export const deleteStudent = (studentId: string) => api.delete("/users/deleteStudent", { data: { studentId } });
-export const changeStudentBatch = (studentId: string, newBatchId: string) =>
-    api.patch("/users/change/student/changeBatch", { studentId, newBatchId });
+export const changeStudentBatch = (studentId: string, newBatchId: string, newSubjectId: string) =>
+    api.patch("/users/change/student/changeBatch", { studentId, newBatchId, newSubjectId });
 export const getAllStudentsOfBatch = (batchId: string) =>
     api.get("/users/get/all/students/of/batch", { params: { batchId } });
 

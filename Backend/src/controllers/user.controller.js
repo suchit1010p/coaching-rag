@@ -8,12 +8,43 @@ import { Student } from "../models/student.model.js";
 import { Batch } from "../models/batch.model.js";
 import { Subject } from "../models/subject.model.js";
 import { StudentSubject } from "../models/studentSubject.model.js";
+import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import { Unit } from "../models/unit.model.js";
 import { Material } from "../models/material.model.js";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../utils/mail.js";
 
+const getCookieMaxAges = () => {
+    const accessTokenCookieDays = Number(process.env.ACCESS_TOKEN_COOKIE_DAYS || 1);
+    const refreshTokenCookieDays = Number(process.env.REFRESH_TOKEN_COOKIE_DAYS || 90);
+
+    return {
+        accessTokenMaxAge: accessTokenCookieDays * 24 * 60 * 60 * 1000,
+        refreshTokenMaxAge: refreshTokenCookieDays * 24 * 60 * 60 * 1000
+    };
+};
+
 const getCookieOptions = () => {
+    const isProduction = process.env.NODE_ENV === "production";
+    const { accessTokenMaxAge, refreshTokenMaxAge } = getCookieMaxAges();
+
+    return {
+        access: {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
+            maxAge: accessTokenMaxAge
+        },
+        refresh: {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? "none" : "lax",
+            maxAge: refreshTokenMaxAge
+        }
+    };
+};
+
+const getClearCookieOptions = () => {
     const isProduction = process.env.NODE_ENV === "production";
 
     return {
@@ -59,8 +90,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
     return res
         .status(201)
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
+        .cookie("accessToken", accessToken, options.access)
+        .cookie("refreshToken", refreshToken, options.refresh)
         .json(
             new ApiResponse(201, createdUser, "User registered Successfully")
         )
@@ -94,8 +125,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
     return res
         .status(200)
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
+        .cookie("accessToken", accessToken, options.access)
+        .cookie("refreshToken", refreshToken, options.refresh)
         .json(
             new ApiResponse(
                 200,
@@ -121,7 +152,7 @@ const logoutUser = asyncHandler(async (req, res) => {
         }
     )
 
-    const options = getCookieOptions();
+    const options = getClearCookieOptions();
 
     return res
         .status(200)
@@ -158,15 +189,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         const { accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefereshTokens(user._id);
         const safeUser = await User.findById(user._id).select("-password -refreshToken");
 
-        const options = {
-            ...getCookieOptions(),
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        };
+        const options = getCookieOptions();
 
         return res
             .status(200)
-            .cookie("accessToken", accessToken, options)
-            .cookie("refreshToken", newRefreshToken, options)
+            .cookie("accessToken", accessToken, options.access)
+            .cookie("refreshToken", newRefreshToken, options.refresh)
             .json(
                 new ApiResponse(
                     200,
@@ -298,16 +326,22 @@ const deleteStudent = asyncHandler(async (req, res) => {
     if (!studentId || studentId.trim() === "") {
         throw new ApiError(400, "Student ID is required")
     }
-    const student = await Student.findByIdAndDelete(studentId)
+    const student = await Student.findById(studentId)
 
     if (!student) {
         throw new ApiError(404, "Student not found")
     }
 
+    await Promise.all([
+        Student.findByIdAndDelete(studentId),
+        StudentSubject.deleteMany({ student: student._id }),
+        AttendanceEntry.deleteMany({ student: student._id })
+    ])
+
     return res
         .status(200)
         .json(
-            new ApiResponse(200, {}, "Student deleted successfully")
+            new ApiResponse(200, {}, "Student and related records deleted successfully")
         )
 })
 
@@ -448,13 +482,16 @@ const deleteBatch = asyncHandler(async (req, res) => {
 
 // change student batch
 const changeStudentBatch = asyncHandler(async (req, res) => {
-    const { studentId, newBatchId } = req.body
+    const { studentId, newBatchId, newSubjectId } = req.body
 
     if (!studentId || studentId.trim() === "") {
         throw new ApiError(400, "Student ID is required")
     }
     if (!newBatchId || newBatchId.trim() === "") {
         throw new ApiError(400, "New Batch ID is required")
+    }
+    if (!newSubjectId || newSubjectId.trim() === "") {
+        throw new ApiError(400, "New Subject ID is required")
     }
 
     const student = await Student.findById(studentId)
@@ -468,13 +505,29 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
         throw new ApiError(404, "New Batch not found")
     }
 
+    const newSubject = await Subject.findById(newSubjectId)
+
+    if (!newSubject) {
+        throw new ApiError(404, "New Subject not found")
+    }
+
+    if (newSubject.batch.toString() !== newBatch._id.toString()) {
+        throw new ApiError(400, "Selected subject does not belong to selected batch")
+    }
+
     student.batch = newBatch._id
     await student.save()
+    await StudentSubject.deleteMany({ student: student._id })
+    await StudentSubject.create({ student: student._id, subject: newSubject._id })
 
     return res
         .status(200)
         .json(
-            new ApiResponse(200, student, "Student batch updated successfully")
+            new ApiResponse(
+                200,
+                { student, subject: newSubject },
+                "Student batch and subject updated successfully"
+            )
         )
 })
 
@@ -783,7 +836,7 @@ const getAllUnitsOfSubject = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Subject not found")
     }
 
-    const units = await Unit.find({ subject: subject._id })
+    const units = await Unit.find({ subject: subject._id }).sort({ createdAt: 1 })
 
     // responce------------------
     return res

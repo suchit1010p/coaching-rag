@@ -25,8 +25,8 @@ export default function Login() {
                 console.log("Student Login response:", response.data);
 
                 if (response.data?.success && response.data?.data) {
-                    const { student, accessToken } = response.data.data;
-                    await login('student', student, accessToken);
+                    const { student, accessToken, refreshToken } = response.data.data;
+                    await login('student', student, accessToken, refreshToken);
                 } else {
                     throw new Error(response.data?.message || 'Login failed');
                 }
@@ -35,8 +35,8 @@ export default function Login() {
                 console.log("User Login response:", response.data);
 
                 if (response.data?.success && response.data?.data) {
-                    const { user: userData, accessToken } = response.data.data;
-                    await login('user', userData, accessToken);
+                    const { user: userData, accessToken, refreshToken } = response.data.data;
+                    await login('user', userData, accessToken, refreshToken);
                 } else {
                     throw new Error(response.data?.message || 'Login failed');
                 }
