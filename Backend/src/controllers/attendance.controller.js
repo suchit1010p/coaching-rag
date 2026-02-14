@@ -3,7 +3,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Attendance } from "../models/attendance.model.js";
 import { AttendanceEntry } from "../models/attendanceEntry.model.js";
-import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import { Student } from "../models/student.model.js";
 import { Subject } from "../models/subject.model.js";
 import { Batch } from "../models/batch.model.js";
@@ -234,7 +233,7 @@ const finalizeAttendance = asyncHandler(async (req, res) => {
  * GET /api/v1/attendance/:attendanceId
  */
 const getAttendanceById = asyncHandler(async (req, res) => {
-    const { attendanceId } = req.body;
+    const attendanceId = req.query?.attendanceId || req.body?.attendanceId;
 
     if (!attendanceId || attendanceId.trim() === "") {
         throw new ApiError(400, "Attendance ID is required");

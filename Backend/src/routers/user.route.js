@@ -4,6 +4,7 @@ import {
     loginUser,
     logoutUser,
     refreshAccessToken,
+    getCurrentUser,
     registerStudent,
     deleteStudent,
     createBatch,
@@ -35,6 +36,7 @@ router.route("/register").post(registerUser)
 router.route("/login").post(loginUser)
 router.route("/logout").post(verifyJWT, logoutUser)
 router.route("/refreshToken").post(refreshAccessToken)
+router.route("/profile").get(verifyJWT, getCurrentUser)
 
 // Student routes
 router.route("/registerStudent").post(verifyJWT, registerStudent)

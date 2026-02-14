@@ -13,6 +13,16 @@ import { Material } from "../models/material.model.js";
 import crypto from "crypto";
 import { sendVerificationEmail } from "../utils/mail.js";
 
+const getCookieOptions = () => {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    return {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax"
+    };
+};
+
 
 // register user
 const registerUser = asyncHandler(async (req, res) => {
@@ -41,11 +51,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id)
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    }
+    const options = getCookieOptions();
 
     if (!createdUser) {
         throw new ApiError(500, "Something went wrong while registering the user")
@@ -64,10 +70,11 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
     const { mobile, password } = req.body
 
-    if (!mobile) throw new ApiError(400, "email is required")
+    if (!mobile) throw new ApiError(400, "mobile is required")
     if (!password) throw new ApiError(400, "password is required")
 
-    const user = await User.findOne({ mobile })
+    const normalizedMobile = mobile.trim();
+    const user = await User.findOne({ mobile: normalizedMobile })
 
     if (!user) {
         throw new ApiError(404, "user does not exist, Please register!!")
@@ -83,11 +90,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(user._id)
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    }
+    const options = getCookieOptions();
 
     return res
         .status(200)
@@ -118,11 +121,7 @@ const logoutUser = asyncHandler(async (req, res) => {
         }
     )
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    }
+    const options = getCookieOptions();
 
     return res
         .status(200)
@@ -160,9 +159,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         const safeUser = await User.findById(user._id).select("-password -refreshToken");
 
         const options = {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
+            ...getCookieOptions(),
             maxAge: 7 * 24 * 60 * 60 * 1000
         };
 
@@ -187,8 +184,18 @@ const registerStudent = asyncHandler(async (req, res) => {
     const { rollNumber, name, mobile, email, password, parentName, parentMobile, batchId } = req.body
 
     if (
-        [rollNumber, name, mobile, email, password, parentName, parentMobile, batchId].some((field) => field?.trim() === "")
-    ) throw new ApiError(400, "All fields are required")
+        rollNumber === undefined ||
+        rollNumber === null ||
+        !name ||
+        !mobile ||
+        !email ||
+        !password ||
+        !parentName ||
+        !parentMobile ||
+        !batchId
+    ) {
+        throw new ApiError(400, "All fields are required")
+    }
 
     // Validate batch exists
     const batch = await Batch.findById(batchId)
@@ -213,7 +220,11 @@ const registerStudent = asyncHandler(async (req, res) => {
     }
 
     // Check if rollNumber already exists in the batch
-    const normalizedRollNumber = rollNumber.trim()
+    const normalizedRollNumber = Number(rollNumber)
+    if (Number.isNaN(normalizedRollNumber)) {
+        throw new ApiError(400, "Roll number must be a valid number")
+    }
+
     const rollNumberExists = await Student.findOne({ rollNumber: normalizedRollNumber, batch: batchId })
 
     if (rollNumberExists) {
@@ -260,13 +271,25 @@ const registerStudent = asyncHandler(async (req, res) => {
 
 // get all students
 const getAllStudents = asyncHandler(async (req, res) => {
-    const Students = Student.find().select("-password")
-
+    const students = await Student.find().select("-password").populate('batch', 'name')
+    console.log(students)
     return res
         .status(200)
         .json(
-            new ApiResponse(200, Students, "All students fetched successfully")
+            new ApiResponse(200, students, "All students fetched successfully")
         )
+})
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user?._id).select("-password -refreshToken");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, user, "User profile fetched successfully"));
 })
 
 // delete student
@@ -374,7 +397,7 @@ const changeBatchName = asyncHandler(async (req, res) => {
 
 // get all students of batch
 const getAllStudentsOfBatch = asyncHandler(async (req, res) => {
-    const { batchId } = req.body
+    const batchId = req.query?.batchId || req.body?.batchId
 
     if (!batchId || batchId.trim() === "") {
         throw new ApiError(400, "Batch ID is required")
@@ -542,7 +565,7 @@ const createSubject = asyncHandler(async (req, res) => {
 
 // get all subjects of batch
 const getAllSubjectsOfBatch = asyncHandler(async (req, res) => {
-    const { batchId } = req.body
+    const batchId = req.query?.batchId || req.body?.batchId
 
     // checking----------------
     if (!batchId || batchId.trim() === "") {
@@ -565,7 +588,7 @@ const getAllSubjectsOfBatch = asyncHandler(async (req, res) => {
 
 // get all students of subject
 const getAllStudentsOfSubject = asyncHandler(async (req, res) => {
-    const { subjectId } = req.body
+    const subjectId = req.query?.subjectId || req.body?.subjectId
 
     // checking----------------
     if (!subjectId || subjectId.trim() === "") {
@@ -747,7 +770,7 @@ const addUnit = asyncHandler(async (req, res) => {
 
 // get all units of subject
 const getAllUnitsOfSubject = asyncHandler(async (req, res) => {
-    const { subjectId } = req.body
+    const subjectId = req.query?.subjectId || req.body?.subjectId
 
     // checking----------------
     if (!subjectId || subjectId.trim() === "") {
@@ -839,7 +862,7 @@ const addMaterialToUnit = asyncHandler(async (req, res) => {
 
 // get all materials of unit
 const getAllMaterialsOfUnit = asyncHandler(async (req, res) => {
-    const { unitId } = req.body
+    const unitId = req.query?.unitId || req.body?.unitId
 
     // checking----------------
     if (!unitId || unitId.trim() === "") {
@@ -874,6 +897,7 @@ export {
     loginUser,
     logoutUser,
     refreshAccessToken,
+    getCurrentUser,
 
     // student functions
     registerStudent,

@@ -6,6 +6,9 @@ import { Student } from "../models/student.model.js";
 
 export const verifyUserOrStudent = asyncHandler(async (req, _, next) => {
     try {
+        const studentAccessSecret =
+            process.env.STUDENT_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET;
+
         // 1. Try to find and verify User Token
         const userToken = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
 
@@ -31,7 +34,7 @@ export const verifyUserOrStudent = asyncHandler(async (req, _, next) => {
 
         if (studentToken) {
             try {
-                const decodedStudent = jwt.verify(studentToken, process.env.STUDENT_ACCESS_TOKEN_SECRET);
+                const decodedStudent = jwt.verify(studentToken, studentAccessSecret);
                 const student = await Student.findById(decodedStudent?._id)
                     .select("-password")
                     .populate('batch', 'name');

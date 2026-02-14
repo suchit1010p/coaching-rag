@@ -4,8 +4,12 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
+const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
+    : true;
+
 app.use(cors({
-    origin: ['http://localhost:8000', 'http://localhost:3000', 'http://localhost:5173'],
+    origin: allowedOrigins,
     credentials: true
 }));
 
@@ -22,6 +26,7 @@ app.use(cookieParser());
 import userRoute from "./routers/user.route.js";
 import studentRoute from "./routers/student.route.js";
 import materialRoute from "./routers/material.route.js";
+import attendanceRoute from "./routers/attendance.route.js";
 
 // User routes (for teachers/admins)
 app.use("/api/v1/users", userRoute);
@@ -31,5 +36,19 @@ app.use("/api/v1/students", studentRoute);
 
 // Material routes
 app.use("/api/v1/materials", materialRoute);
+
+// Attendance routes
+app.use("/api/v1/attendance", attendanceRoute);
+
+app.use((err, req, res, next) => {
+    const statusCode = err?.statusCode || 500;
+
+    return res.status(statusCode).json({
+        success: false,
+        message: err?.message || "Internal Server Error",
+        errors: err?.errors || []
+    });
+});
+
 
 export { app };

@@ -11,6 +11,16 @@ import { Attendance } from "../models/attendance.model.js";
 import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import jwt from "jsonwebtoken";
 
+const getCookieOptions = () => {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    return {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax"
+    };
+};
+
 // Helper function to generate student tokens
 const generateStudentTokens = async (studentId) => {
     try {
@@ -34,7 +44,8 @@ const loginStudent = asyncHandler(async (req, res) => {
     if (!mobile) throw new ApiError(400, "Mobile number is required");
     if (!password) throw new ApiError(400, "Password is required");
 
-    const student = await Student.findOne({ mobile }).populate('batch', 'name');
+    const normalizedMobile = mobile.trim();
+    const student = await Student.findOne({ mobile: normalizedMobile }).populate('batch', 'name');
 
     if (!student) {
         throw new ApiError(404, "Student does not exist");
@@ -46,17 +57,17 @@ const loginStudent = asyncHandler(async (req, res) => {
         throw new ApiError(401, "Invalid credentials");
     }
 
+    if (!student.isVerified) {
+        throw new ApiError(403, "Please verify your email before logging in");
+    }
+
     const loggedInStudent = await Student.findById(student._id)
         .select("-password")
         .populate('batch', 'name');
 
     const { accessToken, refreshToken } = await generateStudentTokens(student._id);
 
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getCookieOptions();
 
     return res
         .status(200)
@@ -77,11 +88,7 @@ const loginStudent = asyncHandler(async (req, res) => {
 
 // Student Logout
 const logoutStudent = asyncHandler(async (req, res) => {
-    const options = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none"
-    };
+    const options = getCookieOptions();
 
     return res
         .status(200)

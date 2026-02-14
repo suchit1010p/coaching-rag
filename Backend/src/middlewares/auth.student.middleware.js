@@ -8,12 +8,14 @@ export const verifyStudentJWT = asyncHandler(async (req, _, next) => {
     try {
         const token = req.cookies?.studentAccessToken ||
             req.header("Authorization")?.replace("Bearer ", "");
+        const studentAccessSecret =
+            process.env.STUDENT_ACCESS_TOKEN_SECRET || process.env.ACCESS_TOKEN_SECRET;
 
         if (!token) {
             throw new ApiError(401, "Unauthorized request - No token provided");
         }
 
-        const decodedToken = jwt.verify(token, process.env.STUDENT_ACCESS_TOKEN_SECRET);
+        const decodedToken = jwt.verify(token, studentAccessSecret);
 
         const student = await Student.findById(decodedToken?._id)
             .select("-password")
