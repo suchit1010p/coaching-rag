@@ -743,10 +743,10 @@ export default function UserDashboard() {
             <View style={styles.subjectIcon}>
                 <Ionicons name="document-outline" size={20} color="#007AFF" />
             </View>
-            <View style={styles.subjectInfo}>
+            <TouchableOpacity style={styles.subjectInfo} onPress={() => handleOpenMaterial(item)}>
                 <Text style={styles.subjectName}>{item.title}</Text>
                 <Text style={styles.subjectMeta}>{item.fileType || 'file'}</Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.subjectActions}>
                 <TouchableOpacity
                     style={styles.subjectActionButton}
