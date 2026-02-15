@@ -44,9 +44,6 @@ const studentSchema = new mongoose.Schema(
             ref: "Batch",
             required: true
         },
-        verificationToken: {
-            type: String
-        },
         isVerified: {
             type: Boolean,
             default: false

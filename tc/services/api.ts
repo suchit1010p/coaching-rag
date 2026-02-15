@@ -114,6 +114,8 @@ export const refreshUserToken = (refreshToken: string) =>
 
 export const logoutUser = () => api.post("/users/logout");
 export const getUserProfile = () => api.get("/users/profile");
+export const registerUser = (data: { name: string; email: string; mobile: string; password: string }) =>
+    api.post("/users/register", data);
 
 // --- Batches ---
 export const createBatch = (name: string) => api.post("/users/create/batch", { name });

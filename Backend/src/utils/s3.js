@@ -98,4 +98,44 @@ const generatePresignedGetUrl = async (fileKey) => {
     }
 };
 
-export { generatePresignedUrl, deleteFromS3, generatePresignedGetUrl };
+export { generatePresignedUrl, deleteFromS3, generatePresignedGetUrl, uploadVerificationFile, deleteVerificationFile };
+
+// Upload verification JSON to S3 and return a presigned GET URL (24h expiry)
+const uploadVerificationFile = async (studentId, email) => {
+    const key = `email-verifications/${studentId}.json`;
+    const body = JSON.stringify({ studentId, email, createdAt: new Date().toISOString() });
+
+    const putCommand = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+        Body: body,
+        ContentType: "application/json",
+    });
+
+    await s3.send(putCommand);
+
+    // Generate presigned GET URL that expires in 24 hours (86400 seconds)
+    const getCommand = new GetObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+    });
+
+    const presignedUrl = await getSignedUrl(s3, getCommand, { expiresIn: 86400 });
+    return presignedUrl;
+};
+
+// Delete verification file from S3 after successful verification
+const deleteVerificationFile = async (studentId) => {
+    try {
+        const key = `email-verifications/${studentId}.json`;
+        const command = new DeleteObjectCommand({
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: key,
+        });
+        await s3.send(command);
+        return true;
+    } catch (error) {
+        console.error("Error deleting verification file from S3:", error);
+        return false;
+    }
+};

@@ -10,6 +10,7 @@ import { Material } from "../models/material.model.js";
 import { Attendance } from "../models/attendance.model.js";
 import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import jwt from "jsonwebtoken";
+import { deleteVerificationFile } from "../utils/s3.js";
 
 const getCookieOptions = () => {
     const isProduction = process.env.NODE_ENV === "production";
@@ -360,23 +361,51 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
         );
 });
 
-// Verify Student Email
+// Verify Student Email using AWS S3 Presigned URL
 const verifyStudentEmail = asyncHandler(async (req, res) => {
-    const { token } = req.params;
+    const { token } = req.query;
 
     if (!token) {
         throw new ApiError(400, "Verification token is required");
     }
 
-    const student = await Student.findOne({ verificationToken: token });
+    // Fetch the verification file from S3 using the presigned URL
+    let verificationData;
+    try {
+        const response = await fetch(token);
+
+        if (!response.ok) {
+            throw new Error("S3 fetch failed");
+        }
+
+        verificationData = await response.json();
+    } catch (error) {
+        throw new ApiError(400, "Verification link is expired or invalid. Please contact your teacher to resend the verification email.");
+    }
+
+    const { studentId } = verificationData;
+
+    if (!studentId) {
+        throw new ApiError(400, "Invalid verification data");
+    }
+
+    const student = await Student.findById(studentId);
 
     if (!student) {
-        throw new ApiError(400, "Invalid or expired verification token");
+        throw new ApiError(404, "Student not found");
+    }
+
+    if (student.isVerified) {
+        return res.status(200).json(
+            new ApiResponse(200, {}, "Email is already verified. You can login.")
+        );
     }
 
     student.isVerified = true;
-    student.verificationToken = undefined; // Clear the token
     await student.save();
+
+    // Clean up the verification file from S3
+    await deleteVerificationFile(studentId);
 
     return res.status(200).json(
         new ApiResponse(200, {}, "Email verified successfully. You can now login.")

@@ -19,7 +19,7 @@ const router = Router();
 // Public routes (no authentication required)
 router.route("/login").post(loginStudent);
 router.route("/refresh-token").post(refreshStudentAccessToken);
-router.route("/verify-email/:token").get(verifyStudentEmail);
+router.route("/verify-email").get(verifyStudentEmail);
 
 // Protected routes (student must be logged in)
 router.route("/logout").post(verifyStudentJWT, logoutStudent);
