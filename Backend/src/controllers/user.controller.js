@@ -11,8 +11,8 @@ import { StudentSubject } from "../models/studentSubject.model.js";
 import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import { Unit } from "../models/unit.model.js";
 import { Material } from "../models/material.model.js";
-import crypto from "crypto";
-import { sendVerificationEmail } from "../utils/mail.js";
+import { sendVerificationEmail, sendTeacherRegistrationEmail } from "../utils/mail.js";
+import { uploadVerificationFile } from "../utils/s3.js";
 
 const getCookieMaxAges = () => {
     const accessTokenCookieDays = Number(process.env.ACCESS_TOKEN_COOKIE_DAYS || 1);
@@ -87,6 +87,8 @@ const registerUser = asyncHandler(async (req, res) => {
     if (!createdUser) {
         throw new ApiError(500, "Something went wrong while registering the user")
     }
+
+    await sendTeacherRegistrationEmail(email, name, mobile, password);
 
     return res
         .status(201)
@@ -259,9 +261,6 @@ const registerStudent = asyncHandler(async (req, res) => {
         throw new ApiError(409, "Roll number already exists in this batch")
     }
 
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-
     // Create student entry
     const student = await Student.create({
         rollNumber: normalizedRollNumber,
@@ -271,8 +270,7 @@ const registerStudent = asyncHandler(async (req, res) => {
         password,
         parentName: parentName.trim(),
         parentMobile: parentMobile.trim(),
-        batch: batchId,
-        verificationToken
+        batch: batchId
     })
 
     // Get student without password and populate batch details
@@ -282,10 +280,9 @@ const registerStudent = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Error while creating student")
     }
 
-    // Send verification email
-    // Construct verification URL (assuming running locally on port 8000 for backend)
-    // In production, this should point to a frontend route which then calls the backend API
-    const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email/${verificationToken}`;
+    // Upload verification file to S3 and get presigned URL
+    const presignedUrl = await uploadVerificationFile(student._id.toString(), normalizedEmail);
+    const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email?token=${encodeURIComponent(presignedUrl)}`;
 
     await sendVerificationEmail(normalizedEmail, studentUser.name, verificationUrl, studentUser.batch.name, studentUser.mobile, password);
 
@@ -437,12 +434,13 @@ const deleteBatch = asyncHandler(async (req, res) => {
     }
 
     await Student.deleteMany({ batch: batch._id })
+    await Subject.deleteMany({ batch: batch._id })
     await Batch.findByIdAndDelete(batchId)
 
     return res
         .status(200)
         .json(
-            new ApiResponse(200, {}, "Batch and associated students deleted successfully")
+            new ApiResponse(200, {}, "Batch and associated students and subjects deleted successfully")
         )
 })
 
