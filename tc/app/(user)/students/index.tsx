@@ -56,7 +56,7 @@ export default function StudentsScreen() {
         parentName: '',
         parentMobile: '',
         batchId: '',
-        subjectId: '',
+        subjectIds: [] as string[],
     });
 
     const fetchStudents = useCallback(async () => {
@@ -121,7 +121,7 @@ export default function StudentsScreen() {
             parentName: '',
             parentMobile: '',
             batchId: '',
-            subjectId: '',
+            subjectIds: [],
         });
         setSubjects([]);
         setBatchMenuOpen(false);
@@ -156,15 +156,19 @@ export default function StudentsScreen() {
     };
 
     const handleSelectBatch = async (batchId: string) => {
-        setForm((prev) => ({ ...prev, batchId, subjectId: '' }));
+        setForm((prev) => ({ ...prev, batchId, subjectIds: [] }));
         setBatchMenuOpen(false);
         setSubjectMenuOpen(false);
         await fetchSubjectsForBatch(batchId);
     };
 
-    const handleSelectSubject = (subjectId: string) => {
-        setForm((prev) => ({ ...prev, subjectId }));
-        setSubjectMenuOpen(false);
+    const handleToggleSubject = (subjectId: string) => {
+        setForm((prev) => ({
+            ...prev,
+            subjectIds: prev.subjectIds.includes(subjectId)
+                ? prev.subjectIds.filter((id) => id !== subjectId)
+                : [...prev.subjectIds, subjectId],
+        }));
     };
 
     const handleRegisterStudent = async () => {
@@ -177,9 +181,9 @@ export default function StudentsScreen() {
             !form.parentName.trim() ||
             !form.parentMobile.trim() ||
             !form.batchId ||
-            !form.subjectId
+            form.subjectIds.length === 0
         ) {
-            Alert.alert('Error', 'Please fill all fields and select batch/subject.');
+            Alert.alert('Error', 'Please fill all fields and select batch/subject(s).');
             return;
         }
 
@@ -203,12 +207,14 @@ export default function StudentsScreen() {
             }
 
             const studentId = registerResponse.data.data._id;
-            const enrollResponse = await addStudentToSubject(form.subjectId, studentId);
-            if (!enrollResponse.data?.success) {
-                throw new Error(enrollResponse.data?.message || 'Student registered but subject enrollment failed.');
+            for (const subjectId of form.subjectIds) {
+                const enrollResponse = await addStudentToSubject(subjectId, studentId);
+                if (!enrollResponse.data?.success) {
+                    throw new Error(enrollResponse.data?.message || `Subject enrollment failed for subject ${subjectId}.`);
+                }
             }
 
-            Alert.alert('Success', 'Student registered and added to subject successfully.');
+            Alert.alert('Success', `Student registered and added to ${form.subjectIds.length} subject(s) successfully.`);
             setRegisterModalVisible(false);
             resetRegisterForm();
             fetchStudents();
@@ -602,7 +608,7 @@ export default function StudentsScreen() {
                                 </View>
                             ) : null}
 
-                            <Text style={styles.label}>Subject</Text>
+                            <Text style={styles.label}>Subject(s)</Text>
                             <TouchableOpacity
                                 style={styles.selectInput}
                                 disabled={!form.batchId || subjectLoading}
@@ -613,12 +619,12 @@ export default function StudentsScreen() {
                                     }
                                 }}
                             >
-                                <Text style={form.subjectId ? styles.selectText : styles.placeholderText}>
+                                <Text style={form.subjectIds.length > 0 ? styles.selectText : styles.placeholderText}>
                                     {subjectLoading
                                         ? 'Loading subjects...'
-                                        : form.subjectId
-                                            ? subjects.find((subject) => subject._id === form.subjectId)?.name || 'Select subject'
-                                            : 'Select subject'}
+                                        : form.subjectIds.length > 0
+                                            ? `${form.subjectIds.length} subject(s) selected`
+                                            : 'Select subjects'}
                                 </Text>
                                 <Ionicons
                                     name={subjectMenuOpen ? 'chevron-up' : 'chevron-down'}
@@ -631,15 +637,26 @@ export default function StudentsScreen() {
                                     {subjects.length === 0 ? (
                                         <Text style={styles.selectEmpty}>No subjects found in this batch</Text>
                                     ) : (
-                                        subjects.map((subject) => (
-                                            <TouchableOpacity
-                                                key={subject._id}
-                                                style={styles.selectItem}
-                                                onPress={() => handleSelectSubject(subject._id)}
-                                            >
-                                                <Text style={styles.selectItemText}>{subject.name}</Text>
-                                            </TouchableOpacity>
-                                        ))
+                                        subjects.map((subject) => {
+                                            const isSelected = form.subjectIds.includes(subject._id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={subject._id}
+                                                    style={[styles.selectItem, isSelected && styles.selectItemActive]}
+                                                    onPress={() => handleToggleSubject(subject._id)}
+                                                >
+                                                    <Ionicons
+                                                        name={isSelected ? 'checkbox' : 'square-outline'}
+                                                        size={18}
+                                                        color={isSelected ? '#007AFF' : '#94A3B8'}
+                                                        style={{ marginRight: 8 }}
+                                                    />
+                                                    <Text style={[styles.selectItemText, isSelected && styles.selectItemTextActive]}>
+                                                        {subject.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })
                                     )}
                                 </View>
                             ) : null}
@@ -1050,11 +1067,19 @@ const styles = StyleSheet.create({
         backgroundColor: '#F8FAFC',
         borderBottomWidth: 1,
         borderBottomColor: '#E2E8F0',
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    selectItemActive: {
+        backgroundColor: '#EFF6FF',
     },
     selectItemText: {
         fontSize: 14,
         color: '#1E293B',
         fontWeight: '600',
+    },
+    selectItemTextActive: {
+        color: '#007AFF',
     },
     selectEmpty: {
         paddingHorizontal: 12,
