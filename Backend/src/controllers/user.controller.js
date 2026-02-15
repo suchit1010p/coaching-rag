@@ -394,40 +394,6 @@ const getAllBatches = asyncHandler(async (req, res) => {
         )
 })
 
-// change Batch name
-const changeBatchName = asyncHandler(async (req, res) => {
-    const { batchId, newName } = req.body
-
-    if (!batchId || batchId.trim() === "") {
-        throw new ApiError(400, "Batch ID is required")
-    }
-
-    if (!newName || newName.trim() === "") {
-        throw new ApiError(400, "New Batch name is required")
-    }
-
-    const batch = await Batch.findById(batchId)
-
-    if (!batch) {
-        throw new ApiError(404, "Batch not found")
-    }
-    const normalizedNewName = newName.trim()
-
-    const existingBatch = await Batch.findOne({ name: normalizedNewName })
-
-    if (existingBatch) {
-        throw new ApiError(409, "Another batch with the same name already exists")
-    }
-
-    batch.name = normalizedNewName
-    await batch.save()
-
-    return res
-        .status(200)
-        .json(
-            new ApiResponse(200, batch, "Batch name updated successfully")
-        )
-})
 
 // get all students of batch
 const getAllStudentsOfBatch = asyncHandler(async (req, res) => {
@@ -482,7 +448,7 @@ const deleteBatch = asyncHandler(async (req, res) => {
 
 // change student batch
 const changeStudentBatch = asyncHandler(async (req, res) => {
-    const { studentId, newBatchId, newSubjectId } = req.body
+    const { studentId, newBatchId, newSubjectIds } = req.body
 
     if (!studentId || studentId.trim() === "") {
         throw new ApiError(400, "Student ID is required")
@@ -490,8 +456,8 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
     if (!newBatchId || newBatchId.trim() === "") {
         throw new ApiError(400, "New Batch ID is required")
     }
-    if (!newSubjectId || newSubjectId.trim() === "") {
-        throw new ApiError(400, "New Subject ID is required")
+    if (!Array.isArray(newSubjectIds) || newSubjectIds.length === 0) {
+        throw new ApiError(400, "At least one subject must be selected")
     }
 
     const student = await Student.findById(studentId)
@@ -505,28 +471,26 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
         throw new ApiError(404, "New Batch not found")
     }
 
-    const newSubject = await Subject.findById(newSubjectId)
+    const subjects = await Subject.find({ _id: { $in: newSubjectIds }, batch: newBatch._id })
 
-    if (!newSubject) {
-        throw new ApiError(404, "New Subject not found")
-    }
-
-    if (newSubject.batch.toString() !== newBatch._id.toString()) {
-        throw new ApiError(400, "Selected subject does not belong to selected batch")
+    if (subjects.length !== newSubjectIds.length) {
+        throw new ApiError(400, "One or more selected subjects do not belong to the selected batch")
     }
 
     student.batch = newBatch._id
     await student.save()
     await StudentSubject.deleteMany({ student: student._id })
-    await StudentSubject.create({ student: student._id, subject: newSubject._id })
+    await StudentSubject.insertMany(
+        newSubjectIds.map((subjectId) => ({ student: student._id, subject: subjectId }))
+    )
 
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                { student, subject: newSubject },
-                "Student batch and subject updated successfully"
+                { student, subjects },
+                "Student batch and subjects updated successfully"
             )
         )
 })
@@ -924,7 +888,6 @@ export {
 
     // batch functions
     createBatch,
-    changeBatchName,
     deleteBatch,
 
     // student-batch functions

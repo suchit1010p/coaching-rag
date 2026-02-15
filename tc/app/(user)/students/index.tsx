@@ -46,7 +46,7 @@ export default function StudentsScreen() {
     const [changeBatchSubjectLoading, setChangeBatchSubjectLoading] = useState(false);
     const [studentForBatchChange, setStudentForBatchChange] = useState<any | null>(null);
     const [newBatchIdForStudent, setNewBatchIdForStudent] = useState('');
-    const [newSubjectIdForStudent, setNewSubjectIdForStudent] = useState('');
+    const [newSubjectIdsForStudent, setNewSubjectIdsForStudent] = useState<string[]>([]);
     const [form, setForm] = useState({
         rollNumber: '',
         name: '',
@@ -281,7 +281,7 @@ export default function StudentsScreen() {
         const currentBatchId = student?.batch?._id || student?.batch || '';
         setStudentForBatchChange(student);
         setNewBatchIdForStudent(currentBatchId);
-        setNewSubjectIdForStudent('');
+        setNewSubjectIdsForStudent([]);
         setChangeBatchSubjects([]);
         setChangeBatchMenuOpen(false);
         setChangeSubjectMenuOpen(false);
@@ -297,7 +297,7 @@ export default function StudentsScreen() {
         setChangeSubjectMenuOpen(false);
         setStudentForBatchChange(null);
         setNewBatchIdForStudent('');
-        setNewSubjectIdForStudent('');
+        setNewSubjectIdsForStudent([]);
         setChangeBatchSubjects([]);
     };
 
@@ -320,8 +320,8 @@ export default function StudentsScreen() {
     };
 
     const handleChangeBatch = async () => {
-        if (!studentForBatchChange?._id || !newBatchIdForStudent || !newSubjectIdForStudent) {
-            Alert.alert('Error', 'Please select both batch and subject.');
+        if (!studentForBatchChange?._id || !newBatchIdForStudent || newSubjectIdsForStudent.length === 0) {
+            Alert.alert('Error', 'Please select batch and at least one subject.');
             return;
         }
 
@@ -330,7 +330,7 @@ export default function StudentsScreen() {
             const response = await changeStudentBatchApi(
                 studentForBatchChange._id,
                 newBatchIdForStudent,
-                newSubjectIdForStudent
+                newSubjectIdsForStudent
             );
             if (!response.data?.success) {
                 throw new Error(response.data?.message || 'Failed to change batch.');
@@ -352,7 +352,7 @@ export default function StudentsScreen() {
 
             closeChangeBatchModal();
             setSelectedStudentId(null);
-            Alert.alert('Success', 'Student batch and subject updated successfully.');
+            Alert.alert('Success', `Student batch and ${newSubjectIdsForStudent.length} subject(s) updated successfully.`);
         } catch (error: any) {
             Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to change student batch/subject.');
         } finally {
@@ -732,7 +732,7 @@ export default function StudentsScreen() {
                                                 style={styles.selectItem}
                                                 onPress={async () => {
                                                     setNewBatchIdForStudent(batch._id);
-                                                    setNewSubjectIdForStudent('');
+                                                    setNewSubjectIdsForStudent([]);
                                                     setChangeBatchMenuOpen(false);
                                                     setChangeSubjectMenuOpen(false);
                                                     await fetchChangeBatchSubjects(batch._id);
@@ -746,7 +746,7 @@ export default function StudentsScreen() {
                             </ScrollView>
                         ) : null}
 
-                        <Text style={styles.label}>Select Subject</Text>
+                        <Text style={styles.label}>Select Subject(s)</Text>
                         <TouchableOpacity
                             style={styles.selectInput}
                             disabled={!newBatchIdForStudent || changeBatchSubjectLoading}
@@ -757,12 +757,12 @@ export default function StudentsScreen() {
                                 }
                             }}
                         >
-                            <Text style={newSubjectIdForStudent ? styles.selectText : styles.placeholderText}>
+                            <Text style={newSubjectIdsForStudent.length > 0 ? styles.selectText : styles.placeholderText}>
                                 {changeBatchSubjectLoading
                                     ? 'Loading subjects...'
-                                    : newSubjectIdForStudent
-                                        ? changeBatchSubjects.find((subject) => subject._id === newSubjectIdForStudent)?.name || 'Select subject'
-                                        : 'Select subject'}
+                                    : newSubjectIdsForStudent.length > 0
+                                        ? `${newSubjectIdsForStudent.length} subject(s) selected`
+                                        : 'Select subjects'}
                             </Text>
                             <Ionicons
                                 name={changeSubjectMenuOpen ? 'chevron-up' : 'chevron-down'}
@@ -776,18 +776,32 @@ export default function StudentsScreen() {
                                     {changeBatchSubjects.length === 0 ? (
                                         <Text style={styles.selectEmpty}>No subjects found in this batch</Text>
                                     ) : (
-                                        changeBatchSubjects.map((subject) => (
-                                            <TouchableOpacity
-                                                key={subject._id}
-                                                style={styles.selectItem}
-                                                onPress={() => {
-                                                    setNewSubjectIdForStudent(subject._id);
-                                                    setChangeSubjectMenuOpen(false);
-                                                }}
-                                            >
-                                                <Text style={styles.selectItemText}>{subject.name}</Text>
-                                            </TouchableOpacity>
-                                        ))
+                                        changeBatchSubjects.map((subject) => {
+                                            const isSubjectSelected = newSubjectIdsForStudent.includes(subject._id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={subject._id}
+                                                    style={[styles.selectItem, isSubjectSelected && styles.selectItemActive]}
+                                                    onPress={() => {
+                                                        setNewSubjectIdsForStudent((prev) =>
+                                                            prev.includes(subject._id)
+                                                                ? prev.filter((id) => id !== subject._id)
+                                                                : [...prev, subject._id]
+                                                        );
+                                                    }}
+                                                >
+                                                    <Ionicons
+                                                        name={isSubjectSelected ? 'checkbox' : 'square-outline'}
+                                                        size={18}
+                                                        color={isSubjectSelected ? '#007AFF' : '#94A3B8'}
+                                                        style={{ marginRight: 8 }}
+                                                    />
+                                                    <Text style={[styles.selectItemText, isSubjectSelected && styles.selectItemTextActive]}>
+                                                        {subject.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })
                                     )}
                                 </View>
                             </ScrollView>

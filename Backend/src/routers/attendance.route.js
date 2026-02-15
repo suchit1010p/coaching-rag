@@ -22,18 +22,18 @@ router.route("/create").post(createAttendance);
 router.route("/mark").post(markAttendance);
 
 // Get attendance by ID
-router.route("/attendance").get(getAttendanceById);
+router.route("/attendance").get(getAttendanceById); //
 
 // Get all attendance sessions (with optional filters)
 router.route("/list").get(getAllAttendance);
 
 // Update single attendance entry
-router.route("/update-entry").patch(updateAttendanceEntry);
+router.route("/update-entry").patch(updateAttendanceEntry); //
 
 // Delete attendance session
 router.route("/delete").delete(deleteAttendance);
 
 // Get attendance report
-router.route("/report").get(getAttendanceReport);
+router.route("/report").get(getAttendanceReport); //
 
 export default router;
