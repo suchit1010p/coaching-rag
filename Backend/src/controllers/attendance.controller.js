@@ -7,6 +7,7 @@ import { Student } from "../models/student.model.js";
 import { Subject } from "../models/subject.model.js";
 import { Batch } from "../models/batch.model.js";
 import { StudentSubject } from "../models/studentSubject.model.js";
+import { sendAbsenceEmail } from "../utils/mail.js";
 
 /**
  * Create new attendance session for a subject
@@ -63,8 +64,7 @@ const createAttendance = asyncHandler(async (req, res) => {
         batch: batchId,
         subject: subjectId,
         date: attendanceDate,
-        takenBy: req.user._id,
-        isFinal: false
+        takenBy: req.user._id
     });
 
     // Populate details
@@ -98,11 +98,6 @@ const markAttendance = asyncHandler(async (req, res) => {
     const attendance = await Attendance.findById(attendanceId);
     if (!attendance) {
         throw new ApiError(404, "Attendance session not found");
-    }
-
-    // Check if attendance is already finalized
-    if (attendance.isFinal) {
-        throw new ApiError(400, "Cannot modify finalized attendance");
     }
 
     const results = [];
@@ -174,6 +169,28 @@ const markAttendance = asyncHandler(async (req, res) => {
         }
     }
 
+    // Send absence emails asynchronously (fire-and-forget)
+    const absentEntries = results.filter(e => e.status === "ABSENT");
+    if (absentEntries.length > 0) {
+        const populatedAttendance = await Attendance.findById(attendanceId)
+            .populate('batch', 'name')
+            .populate('subject', 'name');
+
+        const subjectName = populatedAttendance?.subject?.name || "Unknown Subject";
+        const batchName = populatedAttendance?.batch?.name || "Unknown Batch";
+        const attendanceDate = populatedAttendance?.date;
+
+        for (const entry of absentEntries) {
+            const studentId = entry.student?._id || entry.student;
+            Student.findById(studentId).select('email name').then((student) => {
+                if (student?.email) {
+                    sendAbsenceEmail(student.email, student.name, subjectName, batchName, attendanceDate)
+                        .catch(err => console.error('Failed to send absence email:', err));
+                }
+            }).catch(err => console.error('Failed to fetch student for absence email:', err));
+        }
+    }
+
     return res.status(200).json(
         new ApiResponse(200, {
             success: results,
@@ -182,48 +199,6 @@ const markAttendance = asyncHandler(async (req, res) => {
             successCount: results.length,
             errorCount: errors.length
         }, "Attendance marked successfully")
-    );
-});
-
-/**
- * Finalize attendance and send WhatsApp notifications to parents of absent students
- * POST /api/v1/attendance/finalize
- * Body: { attendanceId }
- */
-const finalizeAttendance = asyncHandler(async (req, res) => {
-    const { attendanceId } = req.body;
-
-    if (!attendanceId || attendanceId.trim() === "") {
-        throw new ApiError(400, "Attendance ID is required");
-    }
-
-    const attendance = await Attendance.findById(attendanceId)
-        .populate('batch', 'name')
-        .populate('subject', 'name');
-
-    if (!attendance) {
-        throw new ApiError(404, "Attendance session not found");
-    }
-
-    if (attendance.isFinal) {
-        throw new ApiError(400, "Attendance is already finalized");
-    }
-
-    // Get all absent students
-    const absentEntries = await AttendanceEntry.find({
-        attendance: attendanceId,
-        status: "ABSENT"
-    }).populate('student', 'name rollNumber parentName parentMobile');
-
-    // Mark as final
-    attendance.isFinal = true;
-    await attendance.save();
-
-    return res.status(200).json(
-        new ApiResponse(200, {
-            attendance,
-            absentCount: absentEntries.length,
-        }, "Attendance finalized successfully")
     );
 });
 
@@ -278,16 +253,15 @@ const getAttendanceById = asyncHandler(async (req, res) => {
 /**
  * Get all attendance sessions (with filters)
  * GET /api/v1/attendance/list
- * Query params: batchId, subjectId, startDate, endDate, isFinal
+ * Query params: batchId, subjectId, startDate, endDate
  */
 const getAllAttendance = asyncHandler(async (req, res) => {
-    const { batchId, subjectId, startDate, endDate, isFinal } = req.query;
+    const { batchId, subjectId, startDate, endDate } = req.query;
 
     const filter = {};
 
     if (batchId) filter.batch = batchId;
     if (subjectId) filter.subject = subjectId;
-    if (isFinal !== undefined) filter.isFinal = isFinal === 'true';
 
     if (startDate || endDate) {
         filter.date = {};
@@ -356,10 +330,6 @@ const updateAttendanceEntry = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Attendance session not found");
     }
 
-    if (attendance.isFinal) {
-        throw new ApiError(400, "Cannot modify finalized attendance");
-    }
-
     const entry = await AttendanceEntry.findOneAndUpdate(
         { attendance: attendanceId, student: studentId },
         { status },
@@ -392,10 +362,6 @@ const deleteAttendance = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Attendance session not found");
     }
 
-    if (attendance.isFinal) {
-        throw new ApiError(400, "Cannot delete finalized attendance. Unfinalize it first.");
-    }
-
     // Delete all attendance entries
     await AttendanceEntry.deleteMany({ attendance: attendanceId });
 
@@ -406,35 +372,6 @@ const deleteAttendance = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, {}, "Attendance session deleted successfully")
-    );
-});
-
-/**
- * Unfinalize attendance (allow modifications again)
- * PATCH /api/v1/attendance/unfinalize
- * Body: { attendanceId }
- */
-const unfinalizeAttendance = asyncHandler(async (req, res) => {
-    const { attendanceId } = req.body;
-
-    if (!attendanceId || attendanceId.trim() === "") {
-        throw new ApiError(400, "Attendance ID is required");
-    }
-
-    const attendance = await Attendance.findById(attendanceId);
-    if (!attendance) {
-        throw new ApiError(404, "Attendance session not found");
-    }
-
-    if (!attendance.isFinal) {
-        throw new ApiError(400, "Attendance is not finalized");
-    }
-
-    attendance.isFinal = false;
-    await attendance.save();
-
-    return res.status(200).json(
-        new ApiResponse(200, attendance, "Attendance unfinalized successfully")
     );
 });
 
@@ -542,11 +479,9 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
 export {
     createAttendance,
     markAttendance,
-    finalizeAttendance,
     getAttendanceById,
     getAllAttendance,
     updateAttendanceEntry,
     deleteAttendance,
-    unfinalizeAttendance,
     getAttendanceReport
 };

@@ -173,3 +173,152 @@ export const sendVerificationEmail = async (email, name, verificationUrl, batchN
         return null;
     }
 };
+
+export const sendAbsenceEmail = async (email, studentName, subjectName, batchName, date) => {
+    try {
+        const formattedDate = new Date(date).toLocaleDateString('en-IN', {
+            weekday: 'long',
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+        });
+
+        const mailOptions = {
+            from: process.env.SENDER_EMAIL,
+            to: email,
+            subject: `Absence Notice - ${subjectName} (${formattedDate})`,
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body {
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            background-color: #f4f4f4;
+                            margin: 0;
+                            padding: 0;
+                            line-height: 1.6;
+                            color: #333;
+                        }
+                        .container {
+                            max-width: 600px;
+                            margin: 20px auto;
+                            background-color: #ffffff;
+                            border-radius: 8px;
+                            overflow: hidden;
+                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                        }
+                        .header {
+                            background-color: #dc2626;
+                            color: #ffffff;
+                            padding: 30px 20px;
+                            text-align: center;
+                        }
+                        .header h1 {
+                            margin: 0;
+                            font-size: 24px;
+                            font-weight: 600;
+                        }
+                        .content {
+                            padding: 40px 30px;
+                        }
+                        .greeting {
+                            font-size: 18px;
+                            margin-bottom: 20px;
+                        }
+                        .message {
+                            margin-bottom: 30px;
+                        }
+                        .details-box {
+                            background-color: #fef2f2;
+                            border: 1px solid #fecaca;
+                            border-radius: 6px;
+                            padding: 20px;
+                            margin-bottom: 30px;
+                        }
+                        .detail-row {
+                            display: flex;
+                            justify-content: space-between;
+                            margin-bottom: 10px;
+                            border-bottom: 1px solid #fecaca;
+                            padding-bottom: 10px;
+                        }
+                        .detail-row:last-child {
+                            border-bottom: none;
+                            margin-bottom: 0;
+                            padding-bottom: 0;
+                        }
+                        .label {
+                            font-weight: 600;
+                            color: #6b7280;
+                        }
+                        .value {
+                            font-weight: 500;
+                            color: #111827;
+                        }
+                        .note {
+                            background-color: #fffbeb;
+                            border: 1px solid #fde68a;
+                            border-radius: 6px;
+                            padding: 15px;
+                            font-size: 14px;
+                            color: #92400e;
+                        }
+                        .footer {
+                            background-color: #f9fafb;
+                            padding: 20px;
+                            text-align: center;
+                            font-size: 14px;
+                            color: #6b7280;
+                            border-top: 1px solid #e5e7eb;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Absence Notice</h1>
+                        </div>
+                        <div class="content">
+                            <p class="greeting">Hello <strong>${studentName}</strong>,</p>
+                            <p class="message">This is to inform you that you were marked <strong>absent</strong> in the following class:</p>
+
+                            <div class="details-box">
+                                <div class="detail-row">
+                                    <span class="label">Subject:</span>
+                                    <span class="value">${subjectName}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="label">Batch:</span>
+                                    <span class="value">${batchName}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="label">Date:</span>
+                                    <span class="value">${formattedDate}</span>
+                                </div>
+                            </div>
+
+                            <div class="note">
+                                <strong>Note:</strong> If you believe this is an error, please contact your teacher or the administration.
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; ${new Date().getFullYear()} BG Group Tuition Classes. All rights reserved.</p>
+                            <p>This is an automated message, please do not reply.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('Absence email sent to %s: %s', email, info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Error sending absence email to %s:', email, error);
+        return null;
+    }
+};

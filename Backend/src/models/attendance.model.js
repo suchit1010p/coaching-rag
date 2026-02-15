@@ -19,10 +19,6 @@ const attendanceSchema = new mongoose.Schema(
         takenBy: {
             type: Schema.Types.ObjectId,
             ref: "User"
-        },
-        isFinal: {
-            type: Boolean,
-            default: false
         }
     }, { timestamps: true }
 );

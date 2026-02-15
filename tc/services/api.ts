@@ -169,7 +169,6 @@ export const createAttendance = (subjectId: string, batchId: string, date: strin
     api.post("/attendance/create", { subjectId, batchId, date });
 export const markAttendance = (attendanceId: string, attendanceEntries: any[]) =>
     api.post("/attendance/mark", { attendanceId, attendanceEntries });
-export const finalizeAttendance = (attendanceId: string) => api.post("/attendance/finalize", { attendanceId });
 export const getAttendanceById = (attendanceId: string) =>
     api.get("/attendance/attendance", { params: { attendanceId } });
 export const getAllAttendance = (params: any) => api.get("/attendance/list", { params });

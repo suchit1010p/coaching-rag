@@ -2,12 +2,10 @@ import { Router } from "express";
 import {
     createAttendance,
     markAttendance,
-    finalizeAttendance,
     getAttendanceById,
     getAllAttendance,
     updateAttendanceEntry,
     deleteAttendance,
-    unfinalizeAttendance,
     getAttendanceReport
 } from "../controllers/attendance.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
@@ -22,12 +20,6 @@ router.route("/create").post(createAttendance);
 
 // Mark attendance for students
 router.route("/mark").post(markAttendance);
-
-// Finalize attendance and send notifications
-router.route("/finalize").post(finalizeAttendance);
-
-// Unfinalize attendance (allow modifications)
-router.route("/unfinalize").patch(unfinalizeAttendance);
 
 // Get attendance by ID
 router.route("/attendance").get(getAttendanceById);
