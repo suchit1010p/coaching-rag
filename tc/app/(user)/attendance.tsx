@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
-        paddingTop: 20,
+        paddingTop: 30,
         paddingHorizontal: 20,
     },
     loadingContainer: {
@@ -818,8 +818,8 @@ const styles = StyleSheet.create({
     },
     takeAttendanceText: {
         color: '#FFF',
-        fontWeight: '600',
-        fontSize: 14,
+        fontWeight: '700',
+        fontSize: 15,
     },
 
     // --- List ---

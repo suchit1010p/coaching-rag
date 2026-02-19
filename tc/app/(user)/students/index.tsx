@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F8FAFC',
         paddingHorizontal: 20,
-        paddingTop: 40,
+        paddingTop: 45,
     },
     loadingContainer: {
         flex: 1,
@@ -880,8 +880,8 @@ const styles = StyleSheet.create({
     },
     registerBtnText: {
         color: '#FFFFFF',
-        fontSize: 13,
-        fontWeight: '700',
+        fontSize: 18,
+        fontWeight: '600',
     },
     searchWrap: {
         backgroundColor: '#FFFFFF',

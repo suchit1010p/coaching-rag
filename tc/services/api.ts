@@ -1,5 +1,5 @@
 import axios from "axios";
-import * as SecureStore from "expo-secure-store";
+import { getItem, setItem, deleteItem } from "./storage";
 import Constants from "expo-constants";
 
 const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
@@ -20,10 +20,10 @@ const ROLE_KEY = "role";
 type AuthRole = "student" | "user";
 
 const clearStoredAuth = async () => {
-    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(ROLE_KEY);
-    await SecureStore.deleteItemAsync("user");
+    await deleteItem(ACCESS_TOKEN_KEY);
+    await deleteItem(REFRESH_TOKEN_KEY);
+    await deleteItem(ROLE_KEY);
+    await deleteItem("user");
 };
 
 const getRefreshEndpoint = (role: AuthRole) => {
@@ -31,7 +31,7 @@ const getRefreshEndpoint = (role: AuthRole) => {
 };
 
 api.interceptors.request.use(async (config) => {
-    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+    const token = await getItem(ACCESS_TOKEN_KEY);
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -41,8 +41,8 @@ api.interceptors.request.use(async (config) => {
 let refreshPromise: Promise<string> | null = null;
 
 const refreshAuthToken = async (): Promise<string> => {
-    const role = await SecureStore.getItemAsync(ROLE_KEY);
-    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    const role = await getItem(ROLE_KEY);
+    const refreshToken = await getItem(REFRESH_TOKEN_KEY);
 
     if ((role !== "student" && role !== "user") || !refreshToken) {
         throw new Error("No refresh session available");
@@ -57,8 +57,8 @@ const refreshAuthToken = async (): Promise<string> => {
     const newAccessToken = response.data.data.accessToken as string;
     const newRefreshToken = (response.data.data.refreshToken as string | undefined) || refreshToken;
 
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, newAccessToken);
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, newRefreshToken);
+    await setItem(ACCESS_TOKEN_KEY, newAccessToken);
+    await setItem(REFRESH_TOKEN_KEY, newRefreshToken);
 
     return newAccessToken;
 };
@@ -106,6 +106,14 @@ export const refreshStudentToken = (refreshToken: string) =>
 
 export const logoutStudent = () => api.post("/students/logout");
 export const getStudentProfile = () => api.get("/students/profile");
+export const getStudentBatch = () => api.get("/students/batch");
+export const getStudentSubjects = () => api.get("/students/subjects");
+export const getStudentSubjectUnits = (subjectId: string) =>
+    api.post("/students/subjects", { subjectId });
+export const getStudentUnitMaterials = (unitId: string) =>
+    api.post("/students/units", { unitId });
+export const getStudentAttendanceHistory = (subjectId?: string) =>
+    api.get("/students/attendance", { params: subjectId ? { subjectId } : {} });
 
 export const loginUser = (mobile: string, password: string) =>
     api.post("/users/login", { mobile, password });
@@ -132,6 +140,8 @@ export const changeStudentBatch = (studentId: string, newBatchId: string, newSub
     api.patch("/users/change/student/changeBatch", { studentId, newBatchId, newSubjectIds });
 export const getAllStudentsOfBatch = (batchId: string) =>
     api.get("/users/get/all/students/of/batch", { params: { batchId } });
+export const changeAllStudentsBatch = (oldBatchId: string, newBatchId: string, newsubjects: string[]) =>
+    api.patch("/users/change/all/students/changeBatch", { oldBatchId, newBatchId, newsubjects });
 
 // --- Subjects ---
 export const createSubject = (name: string, batchId: string) => api.post("/users/create/subject", { name, batchId });

@@ -14,9 +14,14 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { getUserProfile, getAllBatches, deleteBatch, registerUser } from '../../services/api';
+import { getUserProfile, getAllBatches, deleteBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch } from '../../services/api';
 
 interface Batch {
+    _id: string;
+    name: string;
+}
+
+interface Subject {
     _id: string;
     name: string;
 }
@@ -42,6 +47,17 @@ export default function Profile() {
     const [regPassword, setRegPassword] = useState('');
     const [registering, setRegistering] = useState(false);
     const [showRegisterForm, setShowRegisterForm] = useState(false);
+
+    // Change All Students Batch state
+    const [showChangeBatchForm, setShowChangeBatchForm] = useState(false);
+    const [oldBatch, setOldBatch] = useState<Batch | null>(null);
+    const [newBatch, setNewBatch] = useState<Batch | null>(null);
+    const [oldBatchMenuOpen, setOldBatchMenuOpen] = useState(false);
+    const [newBatchMenuOpen, setNewBatchMenuOpen] = useState(false);
+    const [newBatchSubjects, setNewBatchSubjects] = useState<Subject[]>([]);
+    const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
+    const [loadingSubjects, setLoadingSubjects] = useState(false);
+    const [changingBatch, setChangingBatch] = useState(false);
 
     const fetchData = async () => {
         try {
@@ -119,6 +135,85 @@ export default function Profile() {
     const handleCancelDelete = () => {
         setShowConfirm(false);
         setConfirmText('');
+    };
+
+    const handleSelectOldBatch = (batch: Batch) => {
+        setOldBatch(batch);
+        setOldBatchMenuOpen(false);
+    };
+
+    const handleSelectNewBatch = async (batch: Batch) => {
+        setNewBatch(batch);
+        setNewBatchMenuOpen(false);
+        setSelectedSubjectIds([]);
+        setNewBatchSubjects([]);
+        setLoadingSubjects(true);
+        try {
+            const res = await getAllSubjectsOfBatch(batch._id);
+            if (res?.data?.success) {
+                setNewBatchSubjects(res.data.data || []);
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to fetch subjects');
+        } finally {
+            setLoadingSubjects(false);
+        }
+    };
+
+    const toggleSubjectSelection = (subjectId: string) => {
+        setSelectedSubjectIds((prev) =>
+            prev.includes(subjectId)
+                ? prev.filter((id) => id !== subjectId)
+                : [...prev, subjectId]
+        );
+    };
+
+    const handleChangeAllStudentsBatch = async () => {
+        if (!oldBatch) {
+            Alert.alert('Error', 'Please select the old batch');
+            return;
+        }
+        if (!newBatch) {
+            Alert.alert('Error', 'Please select the new batch');
+            return;
+        }
+        if (oldBatch._id === newBatch._id) {
+            Alert.alert('Error', 'Old and new batch cannot be the same');
+            return;
+        }
+        if (selectedSubjectIds.length === 0) {
+            Alert.alert('Error', 'Please select at least one subject');
+            return;
+        }
+
+        Alert.alert(
+            'Confirm',
+            `Move all students from "${oldBatch.name}" to "${newBatch.name}"? This will delete their old attendance records.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Change',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setChangingBatch(true);
+                        try {
+                            const res = await changeAllStudentsBatch(oldBatch._id, newBatch._id, selectedSubjectIds);
+                            if (res?.data?.success) {
+                                Alert.alert('Success', res.data.message || 'All students batch updated successfully');
+                                setOldBatch(null);
+                                setNewBatch(null);
+                                setNewBatchSubjects([]);
+                                setSelectedSubjectIds([]);
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error.response?.data?.message || 'Failed to change batch');
+                        } finally {
+                            setChangingBatch(false);
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     const handleRegisterUser = async () => {
@@ -327,6 +422,136 @@ export default function Profile() {
                                 )}
                             </TouchableOpacity>
                         </View>
+                    </View>
+                )}
+            </View>
+
+            {/* Change All Students Batch Section */}
+            <View style={styles.card}>
+                <TouchableOpacity
+                    style={styles.collapseHeader}
+                    onPress={() => setShowChangeBatchForm((prev) => !prev)}
+                >
+                    <View>
+                        <Text style={styles.cardTitle}>Change All Students Batch</Text>
+                        <Text style={[styles.cardSubtitle, { marginBottom: 0 }]}>
+                            Move all students from one batch to another
+                        </Text>
+                    </View>
+                    <Text style={styles.collapseArrow}>{showChangeBatchForm ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {showChangeBatchForm && (
+                    <View style={styles.collapseBody}>
+                        {/* Old Batch Dropdown */}
+                        <Text style={styles.fieldLabel}>Old Batch</Text>
+                        <TouchableOpacity
+                            style={styles.selectInput}
+                            onPress={() => { setOldBatchMenuOpen((prev) => !prev); setNewBatchMenuOpen(false); }}
+                        >
+                            <Text style={[styles.selectInputText, !oldBatch && styles.selectPlaceholder]}>
+                                {oldBatch ? oldBatch.name : 'Select old batch'}
+                            </Text>
+                            <Text style={styles.selectArrow}>{oldBatchMenuOpen ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
+
+                        {oldBatchMenuOpen && (
+                            <ScrollView style={styles.selectMenu} nestedScrollEnabled={true}>
+                                {batches.length === 0 ? (
+                                    <View style={styles.selectItem}>
+                                        <Text style={styles.selectItemText}>No batches found</Text>
+                                    </View>
+                                ) : (
+                                    batches.map((batch) => (
+                                        <TouchableOpacity
+                                            key={batch._id}
+                                            style={[styles.selectItem, oldBatch?._id === batch._id && styles.selectItemActive]}
+                                            onPress={() => handleSelectOldBatch(batch)}
+                                        >
+                                            <Text style={[styles.selectItemText, oldBatch?._id === batch._id && styles.selectItemTextActive]}>
+                                                {batch.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))
+                                )}
+                            </ScrollView>
+                        )}
+
+                        {/* New Batch Dropdown */}
+                        <Text style={[styles.fieldLabel, { marginTop: 14 }]}>New Batch</Text>
+                        <TouchableOpacity
+                            style={styles.selectInput}
+                            onPress={() => { setNewBatchMenuOpen((prev) => !prev); setOldBatchMenuOpen(false); }}
+                        >
+                            <Text style={[styles.selectInputText, !newBatch && styles.selectPlaceholder]}>
+                                {newBatch ? newBatch.name : 'Select new batch'}
+                            </Text>
+                            <Text style={styles.selectArrow}>{newBatchMenuOpen ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
+
+                        {newBatchMenuOpen && (
+                            <ScrollView style={styles.selectMenu} nestedScrollEnabled={true}>
+                                {batches.length === 0 ? (
+                                    <View style={styles.selectItem}>
+                                        <Text style={styles.selectItemText}>No batches found</Text>
+                                    </View>
+                                ) : (
+                                    batches.map((batch) => (
+                                        <TouchableOpacity
+                                            key={batch._id}
+                                            style={[styles.selectItem, newBatch?._id === batch._id && styles.selectItemActive]}
+                                            onPress={() => handleSelectNewBatch(batch)}
+                                        >
+                                            <Text style={[styles.selectItemText, newBatch?._id === batch._id && styles.selectItemTextActive]}>
+                                                {batch.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))
+                                )}
+                            </ScrollView>
+                        )}
+
+                        {/* Subjects Multi-Select */}
+                        {newBatch && (
+                            <View style={{ marginTop: 14 }}>
+                                <Text style={styles.fieldLabel}>Select Subjects of New Batch</Text>
+                                {loadingSubjects ? (
+                                    <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 10 }} />
+                                ) : newBatchSubjects.length === 0 ? (
+                                    <Text style={styles.cardSubtitle}>No subjects found for this batch</Text>
+                                ) : (
+                                    <View style={styles.subjectList}>
+                                        {newBatchSubjects.map((subject) => {
+                                            const isSelected = selectedSubjectIds.includes(subject._id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={subject._id}
+                                                    style={[styles.subjectChip, isSelected && styles.subjectChipActive]}
+                                                    onPress={() => toggleSubjectSelection(subject._id)}
+                                                >
+                                                    <Text style={[styles.subjectChipText, isSelected && styles.subjectChipTextActive]}>
+                                                        {subject.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        {/* Change Button */}
+                        <TouchableOpacity
+                            style={[styles.changeBatchButton, changingBatch && styles.changeBatchButtonDisabled]}
+                            onPress={handleChangeAllStudentsBatch}
+                            disabled={changingBatch}
+                        >
+                            {changingBatch ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.changeBatchButtonText}>Change Batch</Text>
+                            )}
+                        </TouchableOpacity>
                     </View>
                 )}
             </View>
@@ -675,6 +900,47 @@ const styles = StyleSheet.create({
         opacity: 0.6,
     },
     registerButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    subjectList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    subjectChip: {
+        backgroundColor: '#F1F5F9',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+    },
+    subjectChipActive: {
+        backgroundColor: '#DBEAFE',
+        borderColor: '#2563EB',
+    },
+    subjectChipText: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    subjectChipTextActive: {
+        color: '#2563EB',
+        fontWeight: '600',
+    },
+    changeBatchButton: {
+        backgroundColor: '#F59E0B',
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 16,
+    },
+    changeBatchButtonDisabled: {
+        opacity: 0.6,
+    },
+    changeBatchButtonText: {
         color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '700',

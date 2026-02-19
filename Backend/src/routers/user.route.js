@@ -24,6 +24,7 @@ import {
     getAllSubjectsOfBatch,
     getAllStudentsOfSubject,
     getAllUnitsOfSubject,
+    deleteAllStudentsFromBatch,
 } from "../controllers/user.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -65,5 +66,7 @@ router.route("/get/all/students/of/batch").get(verifyJWT, getAllStudentsOfBatch)
 router.route("/get/all/subjects/of/batch").get(verifyJWT, getAllSubjectsOfBatch)
 router.route("/get/all/students/of/subject").get(verifyJWT, getAllStudentsOfSubject)
 router.route("/get/all/units/of/subject").get(verifyJWT, getAllUnitsOfSubject)
+
+router.route("/delete/all/students/from/batch").delete(verifyJWT, deleteAllStudentsFromBatch) //
 
 export default router

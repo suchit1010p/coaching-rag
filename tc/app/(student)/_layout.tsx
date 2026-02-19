@@ -1,6 +1,7 @@
-import { Stack, Redirect } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function StudentLayout() {
     const { role, isLoading } = useAuth();
@@ -18,8 +19,28 @@ export default function StudentLayout() {
     }
 
     return (
-        <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="dashboard" />
-        </Stack>
+        <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#007AFF' }}>
+            <Tabs.Screen
+                name="dashboard"
+                options={{
+                    title: 'Home',
+                    tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="attendance"
+                options={{
+                    title: 'Attendance',
+                    tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="profile"
+                options={{
+                    title: 'Profile',
+                    tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+                }}
+            />
+        </Tabs>
     );
 }

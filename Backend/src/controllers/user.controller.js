@@ -13,6 +13,8 @@ import { Unit } from "../models/unit.model.js";
 import { Material } from "../models/material.model.js";
 import { sendVerificationEmail, sendTeacherRegistrationEmail } from "../utils/mail.js";
 import { uploadVerificationFile } from "../utils/s3.js";
+import { Attendance } from "../models/attendance.model.js";
+import { deleteVerificationFile, deleteFromS3 } from "../utils/s3.js";
 
 const getCookieMaxAges = () => {
     const accessTokenCookieDays = Number(process.env.ACCESS_TOKEN_COOKIE_DAYS || 1);
@@ -433,7 +435,26 @@ const deleteBatch = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Batch not found")
     }
 
+    // deleting all students, subjects and student subject entries, attendance and attendance entries, material, units of subjects of the batch and then deleting the batch
+
+    await StudentSubject.deleteMany({ student: { $in: (await Student.find({ batch: batch._id })).map(student => student._id) } })
+
+    await AttendanceEntry.deleteMany({ student: { $in: (await Student.find({ batch: batch._id })).map(student => student._id) } })
+    await Attendance.deleteMany({ batch: batch._id })
+
+    // delete material files from s3 and db
+    const subjects = await Subject.find({ batch: batch._id })
+    const subjectIds = subjects.map(s => s._id)
+    const units = await Unit.find({ subject: { $in: subjectIds } })
+    const unitIds = units.map(u => u._id)
+    const materials = await Material.find({ unit: { $in: unitIds } })
+    await Promise.all(materials.map(m => deleteFromS3(m.fileUrl)))
+    await Material.deleteMany({ unit: { $in: unitIds } })
+
+    await Unit.deleteMany({ subject: { $in: subjectIds } })
+
     await Student.deleteMany({ batch: batch._id })
+
     await Subject.deleteMany({ batch: batch._id })
     await Batch.findByIdAndDelete(batchId)
 
@@ -482,6 +503,8 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
         newSubjectIds.map((subjectId) => ({ student: student._id, subject: subjectId }))
     )
 
+    await AttendanceEntry.deleteMany({ student: student._id })
+
     return res
         .status(200)
         .json(
@@ -495,7 +518,7 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
 
 // chnange all student batch from one batch to another batch
 const changeAllStudentsBatch = asyncHandler(async (req, res) => {
-    const { oldBatchId, newBatchId } = req.body
+    const { oldBatchId, newBatchId, newsubjects } = req.body
 
     // checking------------
 
@@ -517,8 +540,47 @@ const changeAllStudentsBatch = asyncHandler(async (req, res) => {
         throw new ApiError(404, "New Batch not found")
     }
 
+    if (!Array.isArray(newsubjects) || newsubjects.length === 0) {
+        throw new ApiError(400, "At least one subject must be selected")
+    }
+
     // main logic------------
 
+    // delete old batch attendace entries and attendance records
+
+    try {
+        await AttendanceEntry.deleteMany({ student: { $in: (await Student.find({ batch: oldBatch._id })).map(student => student._id) } })
+        await Attendance.deleteMany({ batch: oldBatch._id })
+    } catch (error) {
+        throw new ApiError(500, "Error deleting old batch attendance records")
+    }
+
+    // deleting old student subject entries
+
+    try {
+        await StudentSubject.deleteMany({ student: { $in: (await Student.find({ batch: oldBatch._id })).map(student => student._id) } })
+    } catch (error) {
+        throw new ApiError(500, "Error deleting students from batch")
+    }
+
+    // enrolling all students of new batch to new subjects
+    const students = await Student.find({ batch: oldBatch._id })
+
+    const studentSubjectInserts = []
+
+    students.forEach(student => {
+        newsubjects.forEach(subjectId => {
+            studentSubjectInserts.push({ student: student._id, subject: subjectId })
+        })
+    })
+
+    try {
+        await StudentSubject.insertMany(studentSubjectInserts)
+    } catch (error) {
+        throw new ApiError(500, "Error enrolling students to new subjects")
+    }
+
+    // updating batch for all students of old batch to new batch
     const result = await Student.updateMany(
         { batch: oldBatch._id },
         { $set: { batch: newBatch._id } }
@@ -528,7 +590,7 @@ const changeAllStudentsBatch = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(
-            new ApiResponse(200, result, "All students batch updated successfully")
+            new ApiResponse(200, { result, students: studentSubjectInserts.length }, "All students batch updated successfully with new subjects")
         )
 })
 
@@ -735,6 +797,28 @@ const deleteSubjectFromBatch = asyncHandler(async (req, res) => {
     }
 
     // main logic------------------
+    // deleting all units, materials and student subject entries of the subject and then deleting the subject
+
+    const units = await Unit.find({ subject: subject._id })
+
+    const unitIds = units.map(unit => unit._id)
+
+    try {
+        const materials = await Material.find({ unit: { $in: unitIds } })
+        await Promise.all(materials.map(m => deleteFromS3(m.fileUrl)))
+        await Material.deleteMany({ unit: { $in: unitIds } })
+        await Unit.deleteMany({ subject: subject._id })
+    } catch (error) {
+        throw new ApiError(500, "Error deleting subject units and materials")
+    }
+
+    try {
+        await AttendanceEntry.deleteMany({ subject: subject._id })
+        await Attendance.deleteMany({ subject: subject._id })
+    } catch (error) {
+        throw new ApiError(500, "Error while deleting attendance records of subject students")
+    }
+    
     await StudentSubject.deleteMany({ subject: subject._id })
     await subject.deleteOne()
 
@@ -860,6 +944,11 @@ const deleteUnitFromSubject = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Unit not found")
     }
 
+    // delete material files from s3 and db
+    const materials = await Material.find({ unit: unit._id })
+    await Promise.all(materials.map(m => deleteFromS3(m.fileUrl)))
+    await Material.deleteMany({ unit: unit._id })
+
     await unit.deleteOne()
 
     // responce------------------
@@ -868,6 +957,56 @@ const deleteUnitFromSubject = asyncHandler(async (req, res) => {
         .json(
             new ApiResponse(200, {}, "Unit deleted from subject successfully")
         )
+})
+
+
+// deleting all students from batch 
+const deleteAllStudentsFromBatch = asyncHandler(async (req, res) => {
+
+    const { batchId } = req.body
+    if (!batchId || batchId.trim() === "") {
+        throw new ApiError(400, "Batch ID is required")
+    }
+
+    const batch = await Batch.findById(batchId)
+
+    if (!batch) {
+        throw new ApiError(404, "Batch not found")
+    }
+
+    const subjects = await Subject.find({ batch: batch._id }).populate("_id")
+
+    const subjectIds = subjects.map(subject => subject._id)
+
+    try {
+        for (const subjectId of subjectIds) {
+            await StudentSubject.deleteMany({ subject: subjectId })
+        }
+    } catch (error) {
+        throw new ApiError(500, "Error deleting students from batch")
+    }
+
+    const attendance = await Attendance.find({ batch: batch._id }).populate("_id")
+    const attendanceIds = attendance.map(att => att._id)
+
+    try {
+        for (const attendanceId of attendanceIds) {
+            await AttendanceEntry.deleteMany({ attendance: attendanceId })
+        }
+        await Attendance.deleteMany({ batch: batch._id })
+    } catch (error) {
+        throw new ApiError(500, "Error deleting attendance records of batch")
+    }
+
+    await Student.deleteMany({ batch: batch._id })
+
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, {}, "All students of batch deleted successfully")
+        )
+
 })
 
 
@@ -909,6 +1048,10 @@ export {
     getAllStudentsOfBatch,
     getAllSubjectsOfBatch,
     getAllStudentsOfSubject,
-    getAllUnitsOfSubject
+    getAllUnitsOfSubject,
+
+
+    // handle batch at year end
+    deleteAllStudentsFromBatch
     
 }
