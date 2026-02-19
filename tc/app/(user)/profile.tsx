@@ -245,6 +245,13 @@ export default function Profile() {
     };
 
     const handleLogout = async () => {
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm('Are you sure you want to logout?');
+            if (confirmed) {
+                await logout();
+            }
+            return;
+        }
         Alert.alert(
             'Logout',
             'Are you sure you want to logout?',

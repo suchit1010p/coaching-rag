@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from "react";
-import * as SecureStore from "expo-secure-store";
+import { getItem, setItem, deleteItem } from "../services/storage";
 import { useRouter } from "expo-router";
 import {
     getStudentProfile,
@@ -29,10 +29,10 @@ export const useAuth = () => {
 };
 
 const clearStoredAuth = async () => {
-    await SecureStore.deleteItemAsync("token");
-    await SecureStore.deleteItemAsync("refreshToken");
-    await SecureStore.deleteItemAsync("role");
-    await SecureStore.deleteItemAsync("user");
+    await deleteItem("token");
+    await deleteItem("refreshToken");
+    await deleteItem("role");
+    await deleteItem("user");
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -47,9 +47,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const bootstrapAuth = async () => {
         try {
-            const token = await SecureStore.getItemAsync("token");
-            const refreshToken = await SecureStore.getItemAsync("refreshToken");
-            const savedRole = await SecureStore.getItemAsync("role");
+            const token = await getItem("token");
+            const refreshToken = await getItem("refreshToken");
+            const savedRole = await getItem("role");
 
             if ((!token && !refreshToken) || !savedRole) {
                 return;
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             setRole(normalizedRole);
             setUser(profile);
-            await SecureStore.setItemAsync("user", JSON.stringify(profile));
+            await setItem("user", JSON.stringify(profile));
         } catch (error) {
             await clearStoredAuth();
             setRole(null);
@@ -92,10 +92,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRole(roleType);
         setUser(userData);
 
-        await SecureStore.setItemAsync("token", accessToken);
-        await SecureStore.setItemAsync("refreshToken", refreshToken);
-        await SecureStore.setItemAsync("role", roleType);
-        await SecureStore.setItemAsync("user", JSON.stringify(userData));
+        await setItem("token", accessToken);
+        await setItem("refreshToken", refreshToken);
+        await setItem("role", roleType);
+        await setItem("user", JSON.stringify(userData));
 
         if (roleType === "student") {
             router.replace("/(student)/dashboard" as any);
