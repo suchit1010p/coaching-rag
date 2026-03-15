@@ -11,6 +11,7 @@ import {
     Alert,
     Modal,
     ScrollView,
+    Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -36,6 +37,7 @@ export default function StudentsScreen() {
     const [changingBatchStudentId, setChangingBatchStudentId] = useState<string | null>(null);
     const [registerModalVisible, setRegisterModalVisible] = useState(false);
     const [registeringStudent, setRegisteringStudent] = useState(false);
+    const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [subjectLoading, setSubjectLoading] = useState(false);
     const [batchMenuOpen, setBatchMenuOpen] = useState(false);
     const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
@@ -45,6 +47,7 @@ export default function StudentsScreen() {
     const [changeBatchSubjects, setChangeBatchSubjects] = useState<any[]>([]);
     const [changeBatchSubjectLoading, setChangeBatchSubjectLoading] = useState(false);
     const [studentForBatchChange, setStudentForBatchChange] = useState<any | null>(null);
+    const [studentForProfile, setStudentForProfile] = useState<any | null>(null);
     const [newBatchIdForStudent, setNewBatchIdForStudent] = useState('');
     const [newSubjectIdsForStudent, setNewSubjectIdsForStudent] = useState<string[]>([]);
     const [form, setForm] = useState({
@@ -295,6 +298,37 @@ export default function StudentsScreen() {
         }
     };
 
+    const openProfileModal = (student: any) => {
+        setStudentForProfile(student);
+        setProfileModalVisible(true);
+    };
+
+    const closeProfileModal = () => {
+        setProfileModalVisible(false);
+        setStudentForProfile(null);
+    };
+
+    const handleCall = async (phoneNumber?: string) => {
+        if (!phoneNumber?.trim()) {
+            Alert.alert('Unavailable', 'Phone number is not available.');
+            return;
+        }
+
+        const url = `tel:${phoneNumber.trim()}`;
+
+        try {
+            const supported = await Linking.canOpenURL(url);
+            if (!supported) {
+                Alert.alert('Unavailable', 'Calling is not supported on this device.');
+                return;
+            }
+
+            await Linking.openURL(url);
+        } catch {
+            Alert.alert('Error', 'Failed to open the dialer.');
+        }
+    };
+
     const closeChangeBatchModal = () => {
         setChangeBatchModalVisible(false);
         setChangeBatchMenuOpen(false);
@@ -386,6 +420,13 @@ export default function StudentsScreen() {
 
                         {isSelected ? (
                             <View style={styles.actionRow}>
+                                <TouchableOpacity
+                                    style={styles.viewProfileButton}
+                                    onPress={() => openProfileModal(item)}
+                                >
+                                    <Ionicons name="person-circle-outline" size={14} color="#FFFFFF" />
+                                    <Text style={styles.actionButtonText}>View Profile</Text>
+                                </TouchableOpacity>
                                 <TouchableOpacity
                                     style={styles.changeBatchButton}
                                     onPress={() => openChangeBatchModal(item)}
@@ -489,6 +530,110 @@ export default function StudentsScreen() {
                     </View>
                 }
             />
+
+            <Modal
+                animationType="slide"
+                transparent
+                visible={profileModalVisible}
+                onRequestClose={closeProfileModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Student Profile</Text>
+                            <TouchableOpacity onPress={closeProfileModal}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                            <View style={styles.profileAvatarWrap}>
+                                <View style={styles.profileAvatar}>
+                                    <Text style={styles.profileAvatarText}>
+                                        {studentForProfile?.name?.charAt(0)?.toUpperCase() || 'S'}
+                                    </Text>
+                                </View>
+                                <Text style={styles.profileName}>{studentForProfile?.name || '-'}</Text>
+                                <Text style={styles.profileRoll}>Roll #{studentForProfile?.rollNumber ?? '-'}</Text>
+                            </View>
+
+                            <View style={styles.profileCard}>
+                                <Text style={styles.profileSectionTitle}>Personal Details</Text>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Name</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.name || '-'}</Text>
+                                </View>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Email</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.email || '-'}</Text>
+                                </View>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Mobile</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.mobile || '-'}</Text>
+                                </View>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Batch</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.batchName || studentForProfile?.batch?.name || '-'}</Text>
+                                </View>
+                                <View style={[styles.profileRow, styles.profileRowLast]}>
+                                    <Text style={styles.profileLabel}>Verified</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.isVerified ? 'Yes' : 'No'}</Text>
+                                </View>
+                                <View style={styles.callActions}>
+                                    <TouchableOpacity
+                                        style={styles.callButton}
+                                        onPress={() => handleCall(studentForProfile?.mobile)}
+                                    >
+                                        <Ionicons name="call-outline" size={16} color="#FFFFFF" />
+                                        <Text style={styles.callButtonText}>Call Student</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={styles.profileCard}>
+                                <Text style={styles.profileSectionTitle}>Parent Details</Text>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Parent Name</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.parentName || '-'}</Text>
+                                </View>
+                                <View style={styles.profileRow}>
+                                    <Text style={styles.profileLabel}>Father Mobile</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.fatherMobile || '-'}</Text>
+                                </View>
+                                <View style={[styles.profileRow, styles.profileRowLast]}>
+                                    <Text style={styles.profileLabel}>Mother Mobile</Text>
+                                    <Text style={styles.profileValue}>{studentForProfile?.motherMobile || '-'}</Text>
+                                </View>
+                                <View style={styles.callActions}>
+                                    <TouchableOpacity
+                                        style={styles.callButton}
+                                        onPress={() => handleCall(studentForProfile?.fatherMobile)}
+                                    >
+                                        <Ionicons name="call-outline" size={16} color="#FFFFFF" />
+                                        <Text style={styles.callButtonText}>Call Father</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.callButton}
+                                        onPress={() => handleCall(studentForProfile?.motherMobile)}
+                                    >
+                                        <Ionicons name="call-outline" size={16} color="#FFFFFF" />
+                                        <Text style={styles.callButtonText}>Call Mother</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={closeProfileModal}
+                            >
+                                <Text style={styles.saveButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <Modal
                 animationType="slide"
@@ -993,6 +1138,17 @@ const styles = StyleSheet.create({
         gap: 6,
         width: '100%',
     },
+    viewProfileButton: {
+        backgroundColor: '#0F766E',
+        borderRadius: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        width: '100%',
+    },
     deleteButton: {
         backgroundColor: '#DC2626',
         borderRadius: 10,
@@ -1044,6 +1200,93 @@ const styles = StyleSheet.create({
     },
     modalBody: {
         paddingBottom: 6,
+    },
+    profileAvatarWrap: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    profileAvatar: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: '#EFF6FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 10,
+    },
+    profileAvatarText: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: '#2563EB',
+    },
+    profileName: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+    profileRoll: {
+        marginTop: 4,
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    profileCard: {
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 14,
+    },
+    profileSectionTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0F172A',
+        marginBottom: 10,
+    },
+    profileRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0',
+        gap: 12,
+    },
+    profileRowLast: {
+        borderBottomWidth: 0,
+    },
+    profileLabel: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#64748B',
+    },
+    profileValue: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#0F172A',
+        textAlign: 'right',
+    },
+    callActions: {
+        marginTop: 14,
+        gap: 10,
+    },
+    callButton: {
+        backgroundColor: '#059669',
+        borderRadius: 12,
+        paddingVertical: 11,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    callButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
     },
     label: {
         marginTop: 10,
