@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { loginStudent, loginUser } from '../../services/api';
 import { Stack } from 'expo-router';
@@ -8,6 +9,7 @@ export default function Login() {
     const [role, setRole] = useState<'student' | 'user'>('student');
     const [mobile, setMobile] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const { login } = useAuth();
 
@@ -94,14 +96,27 @@ export default function Login() {
 
                     <View style={styles.inputContainer}>
                         <Text style={styles.label}>Password</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Enter your password"
-                            placeholderTextColor="#A0A0A0"
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                        />
+                        <View style={styles.passwordInputWrapper}>
+                            <TextInput
+                                style={[styles.input, styles.passwordInput]}
+                                placeholder="Enter your password"
+                                placeholderTextColor="#A0A0A0"
+                                secureTextEntry={!showPassword}
+                                value={password}
+                                onChangeText={setPassword}
+                            />
+                            <TouchableOpacity
+                                style={styles.passwordToggle}
+                                onPress={() => setShowPassword((current) => !current)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons
+                                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                    size={22}
+                                    color="#3182CE"
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
@@ -212,6 +227,18 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         fontSize: 16,
         color: '#2D3748',
+    },
+    passwordInputWrapper: {
+        position: 'relative',
+        justifyContent: 'center',
+    },
+    passwordInput: {
+        paddingRight: 72,
+    },
+    passwordToggle: {
+        position: 'absolute',
+        right: 16,
+        paddingVertical: 4,
     },
     loginButton: {
         backgroundColor: '#3182CE',
