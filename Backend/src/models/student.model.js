@@ -34,7 +34,12 @@ const studentSchema = new mongoose.Schema(
             type: String,
             required: true
         },
-        parentMobile: {
+        fatherMobile: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        motherMobile: {
             type: String,
             required: true,
             trim: true

@@ -213,7 +213,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
 // register student
 const registerStudent = asyncHandler(async (req, res) => {
-    const { rollNumber, name, mobile, email, password, parentName, parentMobile, batchId } = req.body
+    const { rollNumber, name, mobile, email, password, parentName, fatherMobile, motherMobile, batchId } = req.body
 
     if (
         rollNumber === undefined ||
@@ -223,7 +223,8 @@ const registerStudent = asyncHandler(async (req, res) => {
         !email ||
         !password ||
         !parentName ||
-        !parentMobile ||
+        !fatherMobile ||
+        !motherMobile ||
         !batchId
     ) {
         throw new ApiError(400, "All fields are required")
@@ -271,7 +272,8 @@ const registerStudent = asyncHandler(async (req, res) => {
         email: normalizedEmail,
         password,
         parentName: parentName.trim(),
-        parentMobile: parentMobile.trim(),
+        fatherMobile: fatherMobile.trim(),
+        motherMobile: motherMobile.trim(),
         batch: batchId
     })
 

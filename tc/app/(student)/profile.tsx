@@ -124,9 +124,13 @@ export default function StudentProfile() {
                     <Text style={styles.infoLabel}>Parent Name</Text>
                     <Text style={styles.infoValue}>{profileData?.parentName || '-'}</Text>
                 </View>
+                <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Father Mobile</Text>
+                    <Text style={styles.infoValue}>{profileData?.fatherMobile || '-'}</Text>
+                </View>
                 <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                    <Text style={styles.infoLabel}>Parent Mobile</Text>
-                    <Text style={styles.infoValue}>{profileData?.parentMobile || '-'}</Text>
+                    <Text style={styles.infoLabel}>Mother Mobile</Text>
+                    <Text style={styles.infoValue}>{profileData?.motherMobile || '-'}</Text>
                 </View>
             </View>
 

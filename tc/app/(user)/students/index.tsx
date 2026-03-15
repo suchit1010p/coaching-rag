@@ -54,7 +54,8 @@ export default function StudentsScreen() {
         email: '',
         password: '',
         parentName: '',
-        parentMobile: '',
+        fatherMobile: '',
+        motherMobile: '',
         batchId: '',
         subjectIds: [] as string[],
     });
@@ -119,7 +120,8 @@ export default function StudentsScreen() {
             email: '',
             password: '',
             parentName: '',
-            parentMobile: '',
+            fatherMobile: '',
+            motherMobile: '',
             batchId: '',
             subjectIds: [],
         });
@@ -179,7 +181,8 @@ export default function StudentsScreen() {
             !form.email.trim() ||
             !form.password.trim() ||
             !form.parentName.trim() ||
-            !form.parentMobile.trim() ||
+            !form.fatherMobile.trim() ||
+            !form.motherMobile.trim() ||
             !form.batchId ||
             form.subjectIds.length === 0
         ) {
@@ -197,7 +200,8 @@ export default function StudentsScreen() {
                 email: form.email.trim(),
                 password: form.password,
                 parentName: form.parentName.trim(),
-                parentMobile: form.parentMobile.trim(),
+                fatherMobile: form.fatherMobile.trim(),
+                motherMobile: form.motherMobile.trim(),
                 batchId: form.batchId,
             };
 
@@ -561,13 +565,23 @@ export default function StudentsScreen() {
                                 placeholderTextColor="#94A3B8"
                             />
 
-                            <Text style={styles.label}>Parent Mobile</Text>
+                            <Text style={styles.label}>Father Mobile</Text>
                             <TextInput
                                 style={styles.input}
-                                value={form.parentMobile}
-                                onChangeText={(value) => updateField('parentMobile', value)}
+                                value={form.fatherMobile}
+                                onChangeText={(value) => updateField('fatherMobile', value)}
                                 keyboardType="phone-pad"
-                                placeholder="Enter parent mobile"
+                                placeholder="Enter father mobile"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Mother Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={form.motherMobile}
+                                onChangeText={(value) => updateField('motherMobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter mother mobile"
                                 placeholderTextColor="#94A3B8"
                             />
 
