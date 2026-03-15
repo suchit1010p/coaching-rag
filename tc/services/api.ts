@@ -131,6 +131,8 @@ export const getAllBatches = () => api.get("/users/get/all/batches");
 export const updateBatchName = (batchId: string, newName: string) =>
     api.patch("/users/change/batch/changeName", { batchId, newName });
 export const deleteBatch = (batchId: string) => api.delete("/users/delete/batch", { data: { batchId } });
+export const deleteAllStudentsFromBatch = (batchId: string) =>
+    api.delete("/users/delete/all/students/from/batch", { data: { batchId } });
 
 // --- Students ---
 export const registerStudent = (studentData: any) => api.post("/users/registerStudent", studentData);

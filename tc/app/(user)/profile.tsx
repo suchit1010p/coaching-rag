@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { getUserProfile, getAllBatches, deleteBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch } from '../../services/api';
+import { getUserProfile, getAllBatches, deleteBatch, deleteAllStudentsFromBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch } from '../../services/api';
 
 interface Batch {
     _id: string;
@@ -35,6 +35,11 @@ export default function Profile() {
     const [confirmText, setConfirmText] = useState('');
     const [showConfirm, setShowConfirm] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [selectedBatchForStudentDelete, setSelectedBatchForStudentDelete] = useState<Batch | null>(null);
+    const [studentDeleteMenuOpen, setStudentDeleteMenuOpen] = useState(false);
+    const [studentDeleteConfirmText, setStudentDeleteConfirmText] = useState('');
+    const [showStudentDeleteConfirm, setShowStudentDeleteConfirm] = useState(false);
+    const [deletingStudents, setDeletingStudents] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [profileData, setProfileData] = useState<any>(user);
@@ -135,6 +140,52 @@ export default function Profile() {
     const handleCancelDelete = () => {
         setShowConfirm(false);
         setConfirmText('');
+    };
+
+    const handleSelectBatchForStudentDelete = (batch: Batch) => {
+        setSelectedBatchForStudentDelete(batch);
+        setStudentDeleteMenuOpen(false);
+        setShowStudentDeleteConfirm(false);
+        setStudentDeleteConfirmText('');
+    };
+
+    const handleDeleteAllStudentsPress = () => {
+        if (!selectedBatchForStudentDelete) {
+            Alert.alert('Error', 'Please select a batch first');
+            return;
+        }
+        setShowStudentDeleteConfirm(true);
+        setStudentDeleteConfirmText('');
+    };
+
+    const handleConfirmDeleteAllStudents = async () => {
+        if (!selectedBatchForStudentDelete) return;
+
+        const expectedText = `${selectedBatchForStudentDelete.name} delete students`;
+        if (studentDeleteConfirmText.trim() !== expectedText) {
+            Alert.alert('Error', `Please type "${expectedText}" to confirm deletion`);
+            return;
+        }
+
+        setDeletingStudents(true);
+        try {
+            const res = await deleteAllStudentsFromBatch(selectedBatchForStudentDelete._id);
+            if (res?.data?.success) {
+                Alert.alert('Success', res.data.message || 'All students deleted successfully');
+                setSelectedBatchForStudentDelete(null);
+                setShowStudentDeleteConfirm(false);
+                setStudentDeleteConfirmText('');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to delete students from batch');
+        } finally {
+            setDeletingStudents(false);
+        }
+    };
+
+    const handleCancelDeleteAllStudents = () => {
+        setShowStudentDeleteConfirm(false);
+        setStudentDeleteConfirmText('');
     };
 
     const handleSelectOldBatch = (batch: Batch) => {
@@ -315,6 +366,118 @@ export default function Profile() {
                     <Text style={styles.infoLabel}>Mobile</Text>
                     <Text style={styles.infoValue}>{profileData?.mobile || '-'}</Text>
                 </View>
+            </View>
+
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Delete All Students From Batch</Text>
+                <Text style={styles.cardSubtitle}>
+                    This removes all students and their attendance data from the selected batch
+                </Text>
+
+                <Text style={styles.fieldLabel}>Select Batch</Text>
+                <TouchableOpacity
+                    style={styles.selectInput}
+                    onPress={() => setStudentDeleteMenuOpen((prev) => !prev)}
+                >
+                    <Text
+                        style={[
+                            styles.selectInputText,
+                            !selectedBatchForStudentDelete && styles.selectPlaceholder,
+                        ]}
+                    >
+                        {selectedBatchForStudentDelete ? selectedBatchForStudentDelete.name : 'Select a batch'}
+                    </Text>
+                    <Text style={styles.selectArrow}>{studentDeleteMenuOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {studentDeleteMenuOpen && (
+                    <ScrollView
+                        style={styles.selectMenu}
+                        nestedScrollEnabled={true}
+                    >
+                        {batches.length === 0 ? (
+                            <View style={styles.selectItem}>
+                                <Text style={styles.selectItemText}>No batches found</Text>
+                            </View>
+                        ) : (
+                            batches.map((batch) => (
+                                <TouchableOpacity
+                                    key={batch._id}
+                                    style={[
+                                        styles.selectItem,
+                                        selectedBatchForStudentDelete?._id === batch._id && styles.selectItemActive,
+                                    ]}
+                                    onPress={() => handleSelectBatchForStudentDelete(batch)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.selectItemText,
+                                            selectedBatchForStudentDelete?._id === batch._id &&
+                                                styles.selectItemTextActive,
+                                        ]}
+                                    >
+                                        {batch.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))
+                        )}
+                    </ScrollView>
+                )}
+
+                {selectedBatchForStudentDelete && !showStudentDeleteConfirm && (
+                    <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAllStudentsPress}>
+                        <Text style={styles.deleteButtonText}>Delete All Students</Text>
+                    </TouchableOpacity>
+                )}
+
+                {showStudentDeleteConfirm && selectedBatchForStudentDelete && (
+                    <View style={styles.confirmSection}>
+                        <Text style={styles.confirmLabel}>
+                            Type "<Text style={styles.confirmHighlight}>{selectedBatchForStudentDelete.name} delete students</Text>" to confirm
+                        </Text>
+                        <TextInput
+                            style={styles.confirmInput}
+                            value={studentDeleteConfirmText}
+                            onChangeText={setStudentDeleteConfirmText}
+                            placeholder={`${selectedBatchForStudentDelete.name} delete students`}
+                            placeholderTextColor="#CBD5E1"
+                            autoCapitalize="none"
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                                }, 300);
+                            }}
+                        />
+                        <View style={styles.confirmButtons}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={handleCancelDeleteAllStudents}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.confirmDeleteButton,
+                                    studentDeleteConfirmText.trim() !== `${selectedBatchForStudentDelete.name} delete students` &&
+                                        styles.confirmDeleteButtonDisabled,
+                                ]}
+                                onPress={handleConfirmDeleteAllStudents}
+                                disabled={
+                                    deletingStudents ||
+                                    studentDeleteConfirmText.trim() !== `${selectedBatchForStudentDelete.name} delete students`
+                                }
+                            >
+                                {deletingStudents ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.confirmDeleteButtonText}>
+                                        Confirm Delete
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </View>
 
             {/* Delete Batch Section */}
