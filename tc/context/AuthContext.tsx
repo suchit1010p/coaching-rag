@@ -89,13 +89,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error("Invalid login payload");
         }
 
-        setRole(roleType);
-        setUser(userData);
+        await clearStoredAuth();
 
         await setItem("token", accessToken);
         await setItem("refreshToken", refreshToken);
         await setItem("role", roleType);
         await setItem("user", JSON.stringify(userData));
+
+        setRole(roleType);
+        setUser(userData);
 
         if (roleType === "student") {
             router.replace("/(student)/dashboard" as any);

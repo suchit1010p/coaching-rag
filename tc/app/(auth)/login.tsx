@@ -42,7 +42,6 @@ export default function Login() {
                 }
             }
         } catch (error: any) {
-            console.error(error);
             const errorMessage = error.response?.data?.message || error.message || 'Something went wrong';
             Alert.alert('Login Failed', errorMessage);
         } finally {

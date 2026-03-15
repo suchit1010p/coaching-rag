@@ -30,6 +30,17 @@ const getRefreshEndpoint = (role: AuthRole) => {
     return role === "student" ? "/students/refresh-token" : "/users/refresh-token";
 };
 
+const shouldBypassRefreshHandling = (requestUrl: string) => {
+    return (
+        requestUrl.includes("/students/login") ||
+        requestUrl.includes("/users/login") ||
+        requestUrl.includes("/users/register") ||
+        requestUrl.includes("/students/refresh-token") ||
+        requestUrl.includes("/users/refresh-token") ||
+        requestUrl.includes("/users/refreshToken")
+    );
+};
+
 api.interceptors.request.use(async (config) => {
     const token = await getItem(ACCESS_TOKEN_KEY);
     if (token) {
@@ -69,12 +80,9 @@ api.interceptors.response.use(
         const status = error?.response?.status;
         const originalRequest = error?.config as any;
         const requestUrl = String(originalRequest?.url || "");
-        const isRefreshCall =
-            requestUrl.includes("/users/refresh-token") ||
-            requestUrl.includes("/users/refreshToken") ||
-            requestUrl.includes("/students/refresh-token");
+        const shouldSkipRefresh = shouldBypassRefreshHandling(requestUrl);
 
-        if (status !== 401 || !originalRequest || originalRequest._retry || isRefreshCall) {
+        if (status !== 401 || !originalRequest || originalRequest._retry || shouldSkipRefresh) {
             return Promise.reject(error);
         }
 
@@ -93,6 +101,9 @@ api.interceptors.response.use(
             return api(originalRequest);
         } catch (refreshError) {
             await clearStoredAuth();
+            if (refreshError instanceof Error && refreshError.message === "No refresh session available") {
+                return Promise.reject(error);
+            }
             return Promise.reject(refreshError);
         }
     }
