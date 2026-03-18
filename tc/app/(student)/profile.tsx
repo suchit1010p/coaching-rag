@@ -25,6 +25,7 @@ export default function StudentProfile() {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [changingPassword, setChangingPassword] = useState(false);
+    const [showPasswords, setShowPasswords] = useState(false);
 
     const fetchProfile = async () => {
         try {
@@ -212,6 +213,16 @@ export default function StudentProfile() {
 
                 {showChangePasswordForm && (
                     <View style={styles.collapseBody}>
+                        <TouchableOpacity
+                            style={styles.passwordToggleRow}
+                            onPress={() => setShowPasswords((prev) => !prev)}
+                        >
+                            <View style={[styles.passwordToggleBox, showPasswords && styles.passwordToggleBoxActive]}>
+                                {showPasswords ? <Text style={styles.passwordToggleCheck}>✓</Text> : null}
+                            </View>
+                            <Text style={styles.passwordToggleLabel}>Show passwords</Text>
+                        </TouchableOpacity>
+
                         <Text style={styles.fieldLabel}>Current Password</Text>
                         <TextInput
                             style={styles.input}
@@ -219,7 +230,7 @@ export default function StudentProfile() {
                             onChangeText={setCurrentPassword}
                             placeholder="Enter current password"
                             placeholderTextColor="#94A3B8"
-                            secureTextEntry
+                            secureTextEntry={!showPasswords}
                             autoCapitalize="none"
                         />
 
@@ -230,7 +241,7 @@ export default function StudentProfile() {
                             onChangeText={setNewPassword}
                             placeholder="Enter new password"
                             placeholderTextColor="#94A3B8"
-                            secureTextEntry
+                            secureTextEntry={!showPasswords}
                             autoCapitalize="none"
                         />
 
@@ -241,7 +252,7 @@ export default function StudentProfile() {
                             onChangeText={setConfirmPassword}
                             placeholder="Confirm new password"
                             placeholderTextColor="#94A3B8"
-                            secureTextEntry
+                            secureTextEntry={!showPasswords}
                             autoCapitalize="none"
                         />
 
@@ -378,6 +389,36 @@ const styles = StyleSheet.create({
     },
     collapseBody: {
         marginTop: 16,
+    },
+    passwordToggleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    passwordToggleBox: {
+        width: 20,
+        height: 20,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        backgroundColor: '#FFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    passwordToggleBoxActive: {
+        backgroundColor: '#2563EB',
+        borderColor: '#2563EB',
+    },
+    passwordToggleCheck: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    passwordToggleLabel: {
+        fontSize: 14,
+        color: '#475569',
+        fontWeight: '500',
     },
     verificationBadge: {
         paddingHorizontal: 14,
