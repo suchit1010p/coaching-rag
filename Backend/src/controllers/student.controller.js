@@ -305,8 +305,6 @@ const getUnitMaterials = asyncHandler(async (req, res) => {
 const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
     const { subjectId } = req.query;
 
-    let filter = { student: req.student._id };
-
     // If subjectId provided, verify enrollment and filter by subject
     if (subjectId) {
         const enrollment = await StudentSubject.findOne({
@@ -319,25 +317,50 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
         }
     }
 
-    const attendanceEntries = await AttendanceEntry.find(filter)
-        .populate({
-            path: 'attendance',
-            select: 'date subject batch isFinal',
-            match: subjectId ? { subject: subjectId } : {},
-            populate: [
-                { path: 'subject', select: 'name' },
-                { path: 'batch', select: 'name' }
-            ]
-        })
-        .sort({ createdAt: -1 });
+    const enrolledSubjects = await StudentSubject.find({ student: req.student._id }).select('subject');
+    const enrolledSubjectIds = enrolledSubjects.map((entry) => entry.subject);
+    const attendanceFilter = subjectId
+        ? { subject: subjectId }
+        : { subject: { $in: enrolledSubjectIds } };
 
-    // Filter out entries where attendance is null (doesn't match subject filter)
-    const validEntries = attendanceEntries.filter(entry => entry.attendance !== null);
+    const attendanceSessions = await Attendance.find(attendanceFilter)
+        .populate({
+            path: 'subject',
+            select: 'name'
+        })
+        .populate({
+            path: 'batch',
+            select: 'name'
+        })
+        .sort({ date: -1, createdAt: -1 });
+
+    const absentEntries = await AttendanceEntry.find({
+        student: req.student._id,
+        attendance: { $in: attendanceSessions.map((session) => session._id) },
+        status: 'ABSENT'
+    }).lean();
+
+    const absentEntriesByAttendanceId = new Map(
+        absentEntries.map((entry) => [entry.attendance.toString(), entry])
+    );
+
+    const attendanceEntries = attendanceSessions.map((session) => {
+        const absentEntry = absentEntriesByAttendanceId.get(session._id.toString());
+
+        return {
+            _id: absentEntry?._id?.toString() || session._id.toString(),
+            attendance: session,
+            student: req.student._id,
+            status: absentEntry ? 'ABSENT' : 'PRESENT',
+            createdAt: absentEntry?.createdAt || session.createdAt,
+            updatedAt: absentEntry?.updatedAt || session.updatedAt
+        };
+    });
 
     // Calculate statistics
-    const totalClasses = validEntries.length;
-    const presentCount = validEntries.filter(e => e.status === 'PRESENT').length;
-    const absentCount = validEntries.filter(e => e.status === 'ABSENT').length;
+    const totalClasses = attendanceSessions.length;
+    const absentCount = absentEntries.length;
+    const presentCount = Math.max(totalClasses - absentCount, 0);
     const attendancePercentage = totalClasses > 0
         ? ((presentCount / totalClasses) * 100).toFixed(2)
         : 0;
@@ -348,7 +371,7 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
             new ApiResponse(
                 200,
                 {
-                    attendanceEntries: validEntries,
+                    attendanceEntries,
                     statistics: {
                         totalClasses,
                         present: presentCount,

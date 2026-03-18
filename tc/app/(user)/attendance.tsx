@@ -262,11 +262,9 @@ export default function AttendanceScreen() {
 
     const handleSaveAttendance = async () => {
         if (!attendanceId) return;
-        const entries = Object.entries(statusMap).map(([studentId, status]) => ({ studentId, status }));
-        if (entries.length === 0) {
-            Alert.alert('Error', 'No students to mark');
-            return;
-        }
+        const entries = Object.entries(statusMap)
+            .filter(([, status]) => status === 'ABSENT')
+            .map(([studentId, status]) => ({ studentId, status }));
         setSavingAttendance(true);
         try {
             const response = await markAttendanceApi(attendanceId, entries);

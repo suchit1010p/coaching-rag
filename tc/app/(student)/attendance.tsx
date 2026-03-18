@@ -162,15 +162,17 @@ export default function StudentAttendance() {
             </View>
 
             {/* Subject Filter Chips */}
-            <FlatList
-                data={subjects}
-                renderItem={renderSubjectChip}
-                keyExtractor={(item) => item._id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipContainer}
-                style={styles.chipList}
-            />
+            <View style={styles.chipListWrapper}>
+                <FlatList
+                    data={subjects}
+                    renderItem={renderSubjectChip}
+                    keyExtractor={(item) => item._id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipContainer}
+                    style={styles.chipList}
+                />
+            </View>
 
             {/* Statistics Card */}
             {selectedSubject && statistics && !attendanceLoading && (
@@ -218,20 +220,22 @@ export default function StudentAttendance() {
                     <ActivityIndicator size="large" color="#007AFF" />
                 </View>
             ) : (
-                <FlatList
-                    data={attendanceEntries}
-                    renderItem={renderAttendanceItem}
-                    keyExtractor={(item) => item._id}
-                    contentContainerStyle={styles.listContent}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                    showsVerticalScrollIndicator={false}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <Ionicons name="checkmark-circle-outline" size={48} color="#CBD5E1" />
-                            <Text style={styles.emptyText}>No attendance records found.</Text>
-                        </View>
-                    }
-                />
+                <View style={styles.attendanceListWrapper}>
+                    <FlatList
+                        data={attendanceEntries}
+                        renderItem={renderAttendanceItem}
+                        keyExtractor={(item) => item._id}
+                        contentContainerStyle={styles.listContent}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                        showsVerticalScrollIndicator={false}
+                        ListEmptyComponent={
+                            <View style={styles.emptyState}>
+                                <Ionicons name="checkmark-circle-outline" size={48} color="#CBD5E1" />
+                                <Text style={styles.emptyText}>No attendance records found.</Text>
+                            </View>
+                        }
+                    />
+                </View>
             )}
         </View>
     );
@@ -269,13 +273,18 @@ const styles = StyleSheet.create({
         color: '#64748B',
         marginTop: 2,
     },
+    chipListWrapper: {
+        flexShrink: 0,
+    },
     chipList: {
-        maxHeight: 40,
+        flexGrow: 0,
+        minHeight: 52,
         marginBottom: 16,
     },
     chipContainer: {
         gap: 8,
         paddingRight: 8,
+        paddingVertical: 4,
     },
     chip: {
         paddingHorizontal: 16,
@@ -284,6 +293,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF',
         borderWidth: 1,
         borderColor: '#E2E8F0',
+        alignSelf: 'flex-start',
+        flexShrink: 0,
+        maxWidth: 220,
     },
     chipActive: {
         backgroundColor: '#007AFF',
@@ -293,6 +305,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#64748B',
+        lineHeight: 18,
     },
     chipTextActive: {
         color: '#FFF',
@@ -344,6 +357,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         gap: 12,
+    },
+    attendanceListWrapper: {
+        flex: 1,
+        minHeight: 0,
     },
     promptText: {
         color: '#94A3B8',

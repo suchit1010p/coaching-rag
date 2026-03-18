@@ -9,6 +9,10 @@ import { Batch } from "../models/batch.model.js";
 import { StudentSubject } from "../models/studentSubject.model.js";
 import { sendAbsenceEmail } from "../utils/mail.js";
 
+const getEnrolledStudentCount = async (subjectId) => {
+    return StudentSubject.countDocuments({ subject: subjectId });
+};
+
 /**
  * Create new attendance session for a subject
  * POST /api/v1/attendance/create
@@ -90,8 +94,8 @@ const markAttendance = asyncHandler(async (req, res) => {
     if (!attendanceId || attendanceId.trim() === "") {
         throw new ApiError(400, "Attendance ID is required");
     }
-    if (!attendanceEntries || !Array.isArray(attendanceEntries) || attendanceEntries.length === 0) {
-        throw new ApiError(400, "Attendance entries are required");
+    if (!Array.isArray(attendanceEntries)) {
+        throw new ApiError(400, "Attendance entries must be an array");
     }
 
     // Verify attendance exists
@@ -102,8 +106,9 @@ const markAttendance = asyncHandler(async (req, res) => {
 
     const results = [];
     const errors = [];
+    const validatedAbsentStudents = [];
 
-    // Process each attendance entry
+    // Validate each submitted entry before replacing stored absences.
     for (const entry of attendanceEntries) {
         const { studentId, status } = entry;
 
@@ -142,15 +147,30 @@ const markAttendance = asyncHandler(async (req, res) => {
             continue;
         }
 
+        if (status === "ABSENT") {
+            validatedAbsentStudents.push({
+                studentId: student._id,
+                student: {
+                    _id: student._id,
+                    name: student.name,
+                    rollNumber: student.rollNumber,
+                    mobile: student.mobile
+                }
+            });
+        }
+    }
+
+    await AttendanceEntry.deleteMany({ attendance: attendanceId });
+
+    for (const entry of validatedAbsentStudents) {
         try {
-            // Update or create attendance entry
             const attendanceEntry = await AttendanceEntry.findOneAndUpdate(
                 {
                     attendance: attendanceId,
-                    student: studentId
+                    student: entry.studentId
                 },
                 {
-                    status: status
+                    status: "ABSENT"
                 },
                 {
                     new: true,
@@ -162,16 +182,15 @@ const markAttendance = asyncHandler(async (req, res) => {
             results.push(attendanceEntry);
         } catch (error) {
             if (error.code === 11000) {
-                errors.push({ studentId, error: "Duplicate attendance entry" });
+                errors.push({ studentId: entry.studentId, error: "Duplicate attendance entry" });
             } else {
-                errors.push({ studentId, error: error.message });
+                errors.push({ studentId: entry.studentId, error: error.message });
             }
         }
     }
 
     // Send absence emails asynchronously (fire-and-forget)
-    const absentEntries = results.filter(e => e.status === "ABSENT");
-    if (absentEntries.length > 0) {
+    if (results.length > 0) {
         const populatedAttendance = await Attendance.findById(attendanceId)
             .populate('batch', 'name')
             .populate('subject', 'name');
@@ -180,7 +199,7 @@ const markAttendance = asyncHandler(async (req, res) => {
         const batchName = populatedAttendance?.batch?.name || "Unknown Batch";
         const attendanceDate = populatedAttendance?.date;
 
-        for (const entry of absentEntries) {
+        for (const entry of results) {
             const studentId = entry.student?._id || entry.student;
             Student.findById(studentId).select('email name').then((student) => {
                 if (student?.email) {
@@ -223,15 +242,14 @@ const getAttendanceById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Attendance not found");
     }
 
-    // Get all attendance entries
-    const entries = await AttendanceEntry.find({ attendance: attendanceId })
+    const entries = await AttendanceEntry.find({ attendance: attendanceId, status: "ABSENT" })
         .populate('student', 'name rollNumber mobile parentName parentMobile')
         .sort({ 'student.rollNumber': 1 });
 
     // Calculate statistics
-    const totalStudents = entries.length;
-    const presentCount = entries.filter(e => e.status === "PRESENT").length;
-    const absentCount = entries.filter(e => e.status === "ABSENT").length;
+    const totalStudents = await getEnrolledStudentCount(attendance.subject?._id || attendance.subject);
+    const absentCount = entries.length;
+    const presentCount = Math.max(totalStudents - absentCount, 0);
     const attendancePercentage = totalStudents > 0
         ? ((presentCount / totalStudents) * 100).toFixed(2)
         : 0;
@@ -286,18 +304,20 @@ const getAllAttendance = asyncHandler(async (req, res) => {
     // Get entry counts for each session
     const sessionsWithCounts = await Promise.all(
         attendanceSessions.map(async (session) => {
-            const entries = await AttendanceEntry.find({ attendance: session._id });
-            const presentCount = entries.filter(e => e.status === "PRESENT").length;
-            const absentCount = entries.filter(e => e.status === "ABSENT").length;
+            const [totalStudents, absentCount] = await Promise.all([
+                getEnrolledStudentCount(session.subject?._id || session.subject),
+                AttendanceEntry.countDocuments({ attendance: session._id, status: "ABSENT" })
+            ]);
+            const presentCount = Math.max(totalStudents - absentCount, 0);
 
             return {
                 ...session.toObject(),
                 statistics: {
-                    totalStudents: entries.length,
+                    totalStudents,
                     present: presentCount,
                     absent: absentCount,
-                    attendancePercentage: entries.length > 0
-                        ? ((presentCount / entries.length) * 100).toFixed(2)
+                    attendancePercentage: totalStudents > 0
+                        ? ((presentCount / totalStudents) * 100).toFixed(2)
                         : 0
                 }
             };
@@ -330,14 +350,21 @@ const updateAttendanceEntry = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Attendance session not found");
     }
 
-    const entry = await AttendanceEntry.findOneAndUpdate(
-        { attendance: attendanceId, student: studentId },
-        { status },
-        { new: true, runValidators: true }
-    ).populate('student', 'name rollNumber');
+    let entry;
 
-    if (!entry) {
-        throw new ApiError(404, "Attendance entry not found");
+    if (status === "ABSENT") {
+        entry = await AttendanceEntry.findOneAndUpdate(
+            { attendance: attendanceId, student: studentId },
+            { status: "ABSENT" },
+            { new: true, upsert: true, runValidators: true }
+        ).populate('student', 'name rollNumber');
+    } else {
+        await AttendanceEntry.deleteOne({ attendance: attendanceId, student: studentId });
+        entry = {
+            attendance: attendanceId,
+            student: studentId,
+            status: "PRESENT"
+        };
     }
 
     return res.status(200).json(
@@ -425,19 +452,22 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
     }
 
     // Get all students
-    const students = await Student.find({ batch: batchId }).select('name rollNumber').sort({ rollNumber: 1 });
+    const effectiveBatchId = batchId || sessions[0]?.batch;
+    const students = effectiveBatchId
+        ? await Student.find({ batch: effectiveBatchId }).select('name rollNumber').sort({ rollNumber: 1 })
+        : [];
 
     // Build student-wise report
     const studentReports = await Promise.all(
         students.map(async (student) => {
-            const entries = await AttendanceEntry.find({
+            const absentCount = await AttendanceEntry.countDocuments({
                 student: student._id,
-                attendance: { $in: sessions.map(s => s._id) }
+                attendance: { $in: sessions.map(s => s._id) },
+                status: "ABSENT"
             });
 
-            const totalClasses = entries.length;
-            const presentCount = entries.filter(e => e.status === "PRESENT").length;
-            const absentCount = entries.filter(e => e.status === "ABSENT").length;
+            const totalClasses = sessions.length;
+            const presentCount = Math.max(totalClasses - absentCount, 0);
             const percentage = totalClasses > 0
                 ? ((presentCount / totalClasses) * 100).toFixed(2)
                 : 0;
