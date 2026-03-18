@@ -6,7 +6,6 @@ const studentSchema = new mongoose.Schema(
     {
         rollNumber: {
             type: Number,
-            unique: true,
             trim: true
         },
         name: {
@@ -61,6 +60,8 @@ const studentSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+studentSchema.index({ batch: 1, rollNumber: 1 }, { unique: true });
 
 // Hash password before saving
 studentSchema.pre("save", async function () {
