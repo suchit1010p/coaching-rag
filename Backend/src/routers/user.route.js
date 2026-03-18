@@ -5,6 +5,7 @@ import {
     logoutUser,
     refreshAccessToken,
     getCurrentUser,
+    changeCurrentUserPassword,
     registerStudent,
     deleteStudent,
     createBatch,
@@ -37,6 +38,7 @@ router.route("/logout").post(verifyJWT, logoutUser)
 router.route("/refreshToken").post(refreshAccessToken)
 router.route("/refresh-token").post(refreshAccessToken)
 router.route("/profile").get(verifyJWT, getCurrentUser)
+router.route("/change-password").patch(verifyJWT, changeCurrentUserPassword)
 
 // Student routes
 router.route("/registerStudent").post(verifyJWT, registerStudent)

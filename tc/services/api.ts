@@ -117,6 +117,8 @@ export const refreshStudentToken = (refreshToken: string) =>
 
 export const logoutStudent = () => api.post("/students/logout");
 export const getStudentProfile = () => api.get("/students/profile");
+export const changeStudentPassword = (currentPassword: string, newPassword: string) =>
+    api.patch("/students/change-password", { currentPassword, newPassword });
 export const getStudentBatch = () => api.get("/students/batch");
 export const getStudentSubjects = () => api.get("/students/subjects");
 export const getStudentSubjectUnits = (subjectId: string) =>
@@ -133,6 +135,8 @@ export const refreshUserToken = (refreshToken: string) =>
 
 export const logoutUser = () => api.post("/users/logout");
 export const getUserProfile = () => api.get("/users/profile");
+export const changeUserPassword = (currentPassword: string, newPassword: string) =>
+    api.patch("/users/change-password", { currentPassword, newPassword });
 export const registerUser = (data: { name: string; email: string; mobile: string; password: string }) =>
     api.post("/users/register", data);
 

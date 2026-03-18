@@ -9,16 +9,22 @@ import {
     RefreshControl,
     Alert,
     Platform,
+    TextInput,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { getStudentProfile } from '../../services/api';
+import { changeStudentPassword, getStudentProfile } from '../../services/api';
 
 export default function StudentProfile() {
     const { logout, user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [profileData, setProfileData] = useState<any>(user);
+    const [showChangePasswordForm, setShowChangePasswordForm] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [changingPassword, setChangingPassword] = useState(false);
 
     const fetchProfile = async () => {
         try {
@@ -39,6 +45,44 @@ export default function StudentProfile() {
             fetchProfile();
         }, [])
     );
+
+    const resetPasswordForm = () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    };
+
+    const handleChangePassword = async () => {
+        if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+            Alert.alert('Error', 'All password fields are required');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'New password and confirm password must match');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            const res = await changeStudentPassword(currentPassword, newPassword);
+            if (res?.data?.success) {
+                resetPasswordForm();
+                Alert.alert('Success', res.data.message || 'Password changed successfully', [
+                    {
+                        text: 'OK',
+                        onPress: async () => {
+                            await logout();
+                        },
+                    },
+                ]);
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to change password');
+        } finally {
+            setChangingPassword(false);
+        }
+    };
 
     const handleLogout = async () => {
         if (Platform.OS === 'web') {
@@ -152,6 +196,70 @@ export default function StudentProfile() {
                 </View>
             </View>
 
+            <View style={styles.card}>
+                <TouchableOpacity
+                    style={styles.collapseHeader}
+                    onPress={() => setShowChangePasswordForm((prev) => !prev)}
+                >
+                    <View>
+                        <Text style={styles.cardTitle}>Change Password</Text>
+                        <Text style={[styles.cardSubtitle, { marginBottom: 0 }]}>
+                            You will be asked to login again after updating it
+                        </Text>
+                    </View>
+                    <Text style={styles.collapseArrow}>{showChangePasswordForm ? '↑' : '↓'}</Text>
+                </TouchableOpacity>
+
+                {showChangePasswordForm && (
+                    <View style={styles.collapseBody}>
+                        <Text style={styles.fieldLabel}>Current Password</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={currentPassword}
+                            onChangeText={setCurrentPassword}
+                            placeholder="Enter current password"
+                            placeholderTextColor="#94A3B8"
+                            secureTextEntry
+                            autoCapitalize="none"
+                        />
+
+                        <Text style={styles.fieldLabel}>New Password</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            placeholder="Enter new password"
+                            placeholderTextColor="#94A3B8"
+                            secureTextEntry
+                            autoCapitalize="none"
+                        />
+
+                        <Text style={styles.fieldLabel}>Confirm New Password</Text>
+                        <TextInput
+                            style={styles.input}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Confirm new password"
+                            placeholderTextColor="#94A3B8"
+                            secureTextEntry
+                            autoCapitalize="none"
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.primaryButton, changingPassword && styles.primaryButtonDisabled]}
+                            onPress={handleChangePassword}
+                            disabled={changingPassword}
+                        >
+                            {changingPassword ? (
+                                <ActivityIndicator size="small" color="#FFF" />
+                            ) : (
+                                <Text style={styles.primaryButtonText}>Update Password</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
+
             {/* Logout */}
             <View style={styles.section}>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -259,6 +367,18 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
+    collapseHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    collapseArrow: {
+        fontSize: 14,
+        color: '#94A3B8',
+    },
+    collapseBody: {
+        marginTop: 16,
+    },
     verificationBadge: {
         paddingHorizontal: 14,
         paddingVertical: 6,
@@ -266,6 +386,38 @@ const styles = StyleSheet.create({
     },
     verificationText: {
         fontSize: 13,
+        fontWeight: '700',
+    },
+    fieldLabel: {
+        fontSize: 14,
+        color: '#475569',
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    input: {
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 14,
+        color: '#0F172A',
+        marginBottom: 14,
+    },
+    primaryButton: {
+        backgroundColor: '#2563EB',
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    primaryButtonDisabled: {
+        opacity: 0.6,
+    },
+    primaryButtonText: {
+        color: '#FFF',
+        fontSize: 15,
         fontWeight: '700',
     },
     section: {

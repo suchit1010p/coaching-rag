@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { getUserProfile, getAllBatches, deleteBatch, deleteAllStudentsFromBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch } from '../../services/api';
+import { getUserProfile, getAllBatches, deleteBatch, deleteAllStudentsFromBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch, changeUserPassword } from '../../services/api';
 
 interface Batch {
     _id: string;
@@ -52,6 +52,11 @@ export default function Profile() {
     const [regPassword, setRegPassword] = useState('');
     const [registering, setRegistering] = useState(false);
     const [showRegisterForm, setShowRegisterForm] = useState(false);
+    const [showChangePasswordForm, setShowChangePasswordForm] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [changingPassword, setChangingPassword] = useState(false);
 
     // Change All Students Batch state
     const [showChangeBatchForm, setShowChangeBatchForm] = useState(false);
@@ -292,6 +297,44 @@ export default function Profile() {
             Alert.alert('Error', error.response?.data?.message || 'Failed to register user');
         } finally {
             setRegistering(false);
+        }
+    };
+
+    const resetPasswordForm = () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    };
+
+    const handleChangePassword = async () => {
+        if (!currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+            Alert.alert('Error', 'All password fields are required');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'New password and confirm password must match');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            const res = await changeUserPassword(currentPassword, newPassword);
+            if (res?.data?.success) {
+                resetPasswordForm();
+                Alert.alert('Success', res.data.message || 'Password changed successfully', [
+                    {
+                        text: 'OK',
+                        onPress: async () => {
+                            await logout();
+                        },
+                    },
+                ]);
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to change password');
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -608,7 +651,7 @@ export default function Profile() {
                             Move all students from one batch to another
                         </Text>
                     </View>
-                    <Text style={styles.collapseArrow}>{showChangeBatchForm ? '▲' : '▼'}</Text>
+                    <Text style={styles.collapseArrow}>{showChangeBatchForm ? '↑' : '↓'}</Text>
                 </TouchableOpacity>
 
                 {showChangeBatchForm && (
@@ -738,7 +781,7 @@ export default function Profile() {
                             Create a new teacher/admin account
                         </Text>
                     </View>
-                    <Text style={styles.collapseArrow}>{showRegisterForm ? '▲' : '▼'}</Text>
+                    <Text style={styles.collapseArrow}>{showRegisterForm ? '↑' : '↓'}</Text>
                 </TouchableOpacity>
 
                 {showRegisterForm && (
@@ -812,6 +855,85 @@ export default function Profile() {
                                 <ActivityIndicator size="small" color="#FFFFFF" />
                             ) : (
                                 <Text style={styles.registerButtonText}>Register User</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
+
+            <View style={styles.card}>
+                <TouchableOpacity
+                    style={styles.collapseHeader}
+                    onPress={() => setShowChangePasswordForm((prev) => !prev)}
+                >
+                    <View>
+                        <Text style={styles.cardTitle}>Change Password</Text>
+                        <Text style={[styles.cardSubtitle, { marginBottom: 0 }]}>
+                            You will be asked to login again after updating it
+                        </Text>
+                    </View>
+                    <Text style={styles.collapseArrow}>{showChangePasswordForm ? '↑' : '↓'}</Text>
+                </TouchableOpacity>
+
+                {showChangePasswordForm && (
+                    <View style={styles.collapseBody}>
+                        <Text style={styles.fieldLabel}>Current Password</Text>
+                        <TextInput
+                            style={styles.formInput}
+                            value={currentPassword}
+                            onChangeText={setCurrentPassword}
+                            placeholder="Enter current password"
+                            placeholderTextColor="#CBD5E1"
+                            secureTextEntry
+                            autoCapitalize="none"
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                                }, 300);
+                            }}
+                        />
+
+                        <Text style={styles.fieldLabel}>New Password</Text>
+                        <TextInput
+                            style={styles.formInput}
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            placeholder="Enter new password"
+                            placeholderTextColor="#CBD5E1"
+                            secureTextEntry
+                            autoCapitalize="none"
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                                }, 300);
+                            }}
+                        />
+
+                        <Text style={styles.fieldLabel}>Confirm New Password</Text>
+                        <TextInput
+                            style={styles.formInput}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Confirm new password"
+                            placeholderTextColor="#CBD5E1"
+                            secureTextEntry
+                            autoCapitalize="none"
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                                }, 300);
+                            }}
+                        />
+
+                        <TouchableOpacity
+                            style={[styles.registerButton, changingPassword && styles.registerButtonDisabled]}
+                            onPress={handleChangePassword}
+                            disabled={changingPassword}
+                        >
+                            {changingPassword ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.registerButtonText}>Update Password</Text>
                             )}
                         </TouchableOpacity>
                     </View>

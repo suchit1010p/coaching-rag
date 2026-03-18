@@ -196,6 +196,49 @@ const getStudentProfile = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, student, "Student profile fetched successfully"));
 });
 
+const changeStudentPassword = asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    if (
+        typeof currentPassword !== "string" ||
+        typeof newPassword !== "string" ||
+        currentPassword.trim() === "" ||
+        newPassword.trim() === ""
+    ) {
+        throw new ApiError(400, "Current password and new password are required");
+    }
+
+    const student = await Student.findById(req.student?._id);
+
+    if (!student) {
+        throw new ApiError(404, "Student not found");
+    }
+
+    const isPasswordCorrect = await student.isPasswordCorrect(currentPassword);
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(401, "Current password is incorrect");
+    }
+
+    const isSamePassword = await student.isPasswordCorrect(newPassword);
+
+    if (isSamePassword) {
+        throw new ApiError(400, "New password must be different from current password");
+    }
+
+    student.password = newPassword;
+    student.refreshToken = null;
+    await student.save();
+
+    const options = getClearCookieOptions();
+
+    return res
+        .status(200)
+        .clearCookie("studentAccessToken", options)
+        .clearCookie("studentRefreshToken", options)
+        .json(new ApiResponse(200, {}, "Password changed successfully. Please login again."));
+});
+
 // Get Student's Batch
 const getStudentBatch = asyncHandler(async (req, res) => {
     const batch = await Batch.findById(req.student.batch);
@@ -441,6 +484,7 @@ export {
     logoutStudent,
     refreshStudentAccessToken,
     getStudentProfile,
+    changeStudentPassword,
     getStudentBatch,
     getStudentSubjects,
     getSubjectUnits,

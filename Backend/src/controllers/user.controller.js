@@ -321,6 +321,49 @@ const getCurrentUser = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, user, "User profile fetched successfully"));
 })
 
+const changeCurrentUserPassword = asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+
+    if (
+        typeof currentPassword !== "string" ||
+        typeof newPassword !== "string" ||
+        currentPassword.trim() === "" ||
+        newPassword.trim() === ""
+    ) {
+        throw new ApiError(400, "Current password and new password are required");
+    }
+
+    const user = await User.findById(req.user?._id);
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    const isPasswordCorrect = await user.isPasswordCorrect(currentPassword);
+
+    if (!isPasswordCorrect) {
+        throw new ApiError(401, "Current password is incorrect");
+    }
+
+    const isSamePassword = await user.isPasswordCorrect(newPassword);
+
+    if (isSamePassword) {
+        throw new ApiError(400, "New password must be different from current password");
+    }
+
+    user.password = newPassword;
+    user.refreshToken = null;
+    await user.save();
+
+    const options = getClearCookieOptions();
+
+    return res
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(new ApiResponse(200, {}, "Password changed successfully. Please login again."));
+})
+
 // delete student
 const deleteStudent = asyncHandler(async (req, res) => {
     const { studentId } = req.body
@@ -1020,6 +1063,7 @@ export {
     logoutUser,
     refreshAccessToken,
     getCurrentUser,
+    changeCurrentUserPassword,
 
     // student functions
     registerStudent,

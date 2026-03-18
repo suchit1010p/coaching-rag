@@ -4,6 +4,7 @@ import {
     logoutStudent,
     refreshStudentAccessToken,
     getStudentProfile,
+    changeStudentPassword,
     getStudentBatch,
     getStudentSubjects,
     getSubjectUnits,
@@ -24,6 +25,7 @@ router.route("/verify-email").get(verifyStudentEmail);
 // Protected routes (student must be logged in)
 router.route("/logout").post(verifyStudentJWT, logoutStudent);
 router.route("/profile").get(verifyStudentJWT, getStudentProfile);
+router.route("/change-password").patch(verifyStudentJWT, changeStudentPassword);
 router.route("/batch").get(verifyStudentJWT, getStudentBatch);
 router.route("/subjects").get(verifyStudentJWT, getStudentSubjects);
 router.route("/attendance").get(verifyStudentJWT, getStudentAttendanceHistory);
