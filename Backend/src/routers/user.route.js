@@ -7,6 +7,7 @@ import {
     getCurrentUser,
     changeCurrentUserPassword,
     registerStudent,
+    bulkStudentsRegistration,
     deleteStudent,
     createBatch,
     deleteBatch,
@@ -20,6 +21,7 @@ import {
     changeUnitName,
     deleteUnitFromSubject,
     getAllStudents,
+    getStudentAttendanceHistoryForUser,
     getAllBatches,
     getAllStudentsOfBatch,
     getAllSubjectsOfBatch,
@@ -42,6 +44,7 @@ router.route("/change-password").patch(verifyJWT, changeCurrentUserPassword)
 
 // Student routes
 router.route("/registerStudent").post(verifyJWT, registerStudent)
+router.route("/registerStudentsBulk").post(verifyJWT, bulkStudentsRegistration)
 router.route("/deleteStudent").delete(verifyJWT, deleteStudent)
 
 // Batch routes
@@ -63,6 +66,7 @@ router.route("/delete/unit").delete(verifyJWT, deleteUnitFromSubject)
 
 // Get routes
 router.route("/get/all/students").get(verifyJWT, getAllStudents)
+router.route("/get/student/attendance").get(verifyJWT, getStudentAttendanceHistoryForUser)
 router.route("/get/all/batches").get(verifyJWT, getAllBatches)
 router.route("/get/all/students/of/batch").get(verifyJWT, getAllStudentsOfBatch)
 router.route("/get/all/subjects/of/batch").get(verifyJWT, getAllSubjectsOfBatch)

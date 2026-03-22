@@ -297,6 +297,189 @@ const registerStudent = asyncHandler(async (req, res) => {
         )
 })
 
+const normalizeBulkStudentField = (value) => {
+    if (value === undefined || value === null) {
+        return ""
+    }
+
+    return String(value).trim()
+}
+
+const bulkStudentsRegistration = asyncHandler(async (req, res) => {
+    const { studentsData, batchId, subjects } = req.body
+
+    if (!Array.isArray(studentsData) || studentsData.length === 0) {
+        throw new ApiError(400, "studentsData must be a non-empty array")
+    }
+
+    if (!batchId || batchId.trim() === "") {
+        throw new ApiError(400, "Batch ID is required")
+    }
+
+    const batch = await Batch.findById(batchId)
+    if (!batch) {
+        throw new ApiError(404, "Batch not found")
+    }
+
+    if (!subjects || !Array.isArray(subjects) || subjects.length === 0) {
+        throw new ApiError(400, "Subjects are required and must be a non-empty array")
+    }
+
+    const normalizedSubjectIds = [...new Set(subjects.map((subjectId) => normalizeBulkStudentField(subjectId)))]
+
+    if (normalizedSubjectIds.some((subjectId) => subjectId === "")) {
+        throw new ApiError(400, "All subject IDs must be valid non-empty values")
+    }
+
+    const validSubjects = await Subject.find({ _id: { $in: normalizedSubjectIds }, batch: batch._id })
+
+    if (validSubjects.length !== normalizedSubjectIds.length) {
+        throw new ApiError(400, "One or more selected subjects do not belong to the selected batch")
+    }
+
+    const studentErrors = []
+    const createdStudents = []
+    const mailsData = []
+
+    for (let i = 0; i < studentsData.length; i++) {
+        const rawStudent = studentsData[i]
+        const rowNumber = i + 1
+
+        if (!rawStudent || typeof rawStudent !== "object" || Array.isArray(rawStudent)) {
+            studentErrors.push(`Row ${rowNumber}: Invalid student data`)
+            continue
+        }
+
+        const name = normalizeBulkStudentField(rawStudent.name)
+        const mobile = normalizeBulkStudentField(rawStudent.mobile)
+        const email = normalizeBulkStudentField(rawStudent.email).toLowerCase()
+        const password = normalizeBulkStudentField(rawStudent["Date-of-Birth"])
+        const parentName = normalizeBulkStudentField(rawStudent.parentName)
+        const fatherMobile = normalizeBulkStudentField(rawStudent.fatherMobile)
+        const motherMobile = normalizeBulkStudentField(rawStudent.motherMobile)
+        const rollNumber = i + 1
+
+        if (!name || !mobile || !email || !password || !parentName || !fatherMobile || !motherMobile) {
+            studentErrors.push(`Row ${rowNumber}: All fields are required`)
+            continue
+        }
+
+        const normalizedRollNumber = Number(rollNumber)
+
+        if (Number.isNaN(normalizedRollNumber)) {
+            studentErrors.push(`Row ${rowNumber}: Roll number must be a valid number`)
+            continue
+        }
+
+        const existingStudentMobile = await Student.findOne({ mobile })
+        if (existingStudentMobile) {
+            studentErrors.push(`Row ${rowNumber}: Student with this mobile number already exists`)
+            continue
+        }
+
+        const existingStudentEmail = await Student.findOne({ email })
+        if (existingStudentEmail) {
+            studentErrors.push(`Row ${rowNumber}: Student with this email already exists`)
+            continue
+        }
+
+        const rollNumberExists = await Student.findOne({ rollNumber: normalizedRollNumber, batch: batchId })
+        if (rollNumberExists) {
+            studentErrors.push(`Row ${rowNumber}: Roll number already exists in this batch`)
+            continue
+        }
+
+        let student = null
+
+        try {
+            student = await Student.create({
+                rollNumber: normalizedRollNumber,
+                name,
+                mobile,
+                email,
+                password,
+                parentName,
+                fatherMobile,
+                motherMobile,
+                batch: batchId
+            })
+
+            await StudentSubject.insertMany(
+                normalizedSubjectIds.map((subjectId) => ({ student: student._id, subject: subjectId }))
+            )
+
+            const studentUser = await Student.findById(student._id).select("-password").populate("batch", "name")
+
+            if (!studentUser) {
+                await StudentSubject.deleteMany({ student: student._id })
+                await Student.findByIdAndDelete(student._id)
+                studentErrors.push(`Row ${rowNumber}: Error while fetching created student`)
+                continue
+            }
+
+            createdStudents.push(studentUser)
+            mailsData.push({
+                id: student._id.toString(),
+                email,
+                name,
+                batchName: batch.name,
+                mobile,
+                password
+            })
+        } catch (error) {
+            if (student?._id) {
+                await StudentSubject.deleteMany({ student: student._id })
+                await Student.findByIdAndDelete(student._id)
+            }
+
+            studentErrors.push(`Row ${rowNumber}: ${error?.message || "Failed to register student"}`)
+        }
+    }
+
+    const emailErrors = await sendVerificationEmailInBulk(mailsData)
+    const statusCode = createdStudents.length > 0 ? 201 : 400
+    const allErrors = [...studentErrors, ...emailErrors]
+
+    return res
+        .status(statusCode)
+        .json(
+            new ApiResponse(
+                statusCode,
+                {
+                    createdStudents,
+                    createdCount: createdStudents.length,
+                    failedCount: studentErrors.length,
+                    emailFailedCount: emailErrors.length,
+                    errors: allErrors
+                },
+                "Bulk student registration completed"
+            )
+        )
+})
+
+const sendVerificationEmailInBulk = async (mailsData) => {
+    if (!Array.isArray(mailsData) || mailsData.length === 0) {
+        return []
+    }
+
+    const results = await Promise.allSettled(
+        mailsData.map(async (mailData) => {
+            const presignedUrl = await uploadVerificationFile(mailData.id, mailData.email);
+            const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email?token=${encodeURIComponent(presignedUrl)}`;
+
+            await sendVerificationEmail(mailData.email, mailData.name, verificationUrl, mailData.batchName, mailData.mobile, mailData.password);
+        })
+    )
+
+    return results.reduce((errors, result, index) => {
+        if (result.status === "rejected") {
+            errors.push(`Verification email failed for ${mailsData[index].email}: ${result.reason?.message || "Unknown error"}`)
+        }
+
+        return errors
+    }, [])
+}
+
 
 // get all students
 const getAllStudents = asyncHandler(async (req, res) => {
@@ -306,6 +489,123 @@ const getAllStudents = asyncHandler(async (req, res) => {
         .status(200)
         .json(
             new ApiResponse(200, students, "All students fetched successfully")
+        )
+})
+
+const getStudentAttendanceHistoryForUser = asyncHandler(async (req, res) => {
+    const studentId = req.query?.studentId || req.body?.studentId
+    const subjectId = req.query?.subjectId || req.body?.subjectId
+
+    if (!studentId || studentId.trim() === "") {
+        throw new ApiError(400, "Student ID is required")
+    }
+
+    const student = await Student.findById(studentId).select("_id")
+
+    if (!student) {
+        throw new ApiError(404, "Student not found")
+    }
+
+    const enrollments = await StudentSubject.find({ student: student._id })
+        .populate({
+            path: "subject",
+            select: "name"
+        })
+        .lean()
+
+    const subjects = enrollments
+        .map((enrollment) => enrollment.subject)
+        .filter((subject) => subject?._id)
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+
+    if (subjectId) {
+        const isEnrolledInSubject = subjects.some(
+            (subject) => subject._id.toString() === subjectId
+        )
+
+        if (!isEnrolledInSubject) {
+            throw new ApiError(403, "Student is not enrolled in this subject")
+        }
+    }
+
+    const selectedSubjectId = subjectId || subjects[0]?._id?.toString() || null
+
+    if (!selectedSubjectId) {
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    {
+                        subjects: [],
+                        selectedSubjectId: null,
+                        attendanceEntries: [],
+                        statistics: null
+                    },
+                    "Student attendance history fetched successfully"
+                )
+            )
+    }
+
+    const attendanceSessions = await Attendance.find({ subject: selectedSubjectId })
+        .populate({
+            path: "subject",
+            select: "name"
+        })
+        .populate({
+            path: "batch",
+            select: "name"
+        })
+        .sort({ date: -1, createdAt: -1 })
+
+    const absentEntries = await AttendanceEntry.find({
+        student: student._id,
+        attendance: { $in: attendanceSessions.map((session) => session._id) },
+        status: "ABSENT"
+    }).lean()
+
+    const absentEntriesByAttendanceId = new Map(
+        absentEntries.map((entry) => [entry.attendance.toString(), entry])
+    )
+
+    const attendanceEntries = attendanceSessions.map((session) => {
+        const absentEntry = absentEntriesByAttendanceId.get(session._id.toString())
+
+        return {
+            _id: absentEntry?._id?.toString() || session._id.toString(),
+            attendance: session,
+            student: student._id,
+            status: absentEntry ? "ABSENT" : "PRESENT",
+            createdAt: absentEntry?.createdAt || session.createdAt,
+            updatedAt: absentEntry?.updatedAt || session.updatedAt
+        }
+    })
+
+    const totalClasses = attendanceSessions.length
+    const absentCount = absentEntries.length
+    const presentCount = Math.max(totalClasses - absentCount, 0)
+    const attendancePercentage = totalClasses > 0
+        ? ((presentCount / totalClasses) * 100).toFixed(2)
+        : 0
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    subjects,
+                    selectedSubjectId,
+                    attendanceEntries,
+                    statistics: {
+                        totalClasses,
+                        present: presentCount,
+                        absent: absentCount,
+                        attendancePercentage: parseFloat(attendancePercentage)
+                    }
+                },
+                "Student attendance history fetched successfully"
+            )
         )
 })
 
@@ -1067,6 +1367,7 @@ export {
 
     // student functions
     registerStudent,
+    bulkStudentsRegistration,
     deleteStudent,
 
     // batch functions
@@ -1090,6 +1391,7 @@ export {
 
     // get functions
     getAllStudents,
+    getStudentAttendanceHistoryForUser,
     getAllBatches,
     getAllStudentsOfBatch,
     getAllSubjectsOfBatch,

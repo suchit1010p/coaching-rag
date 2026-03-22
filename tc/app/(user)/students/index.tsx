@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -20,6 +20,7 @@ import {
     changeStudentBatch as changeStudentBatchApi,
     deleteStudent as deleteStudentApi,
     getAllBatches,
+    getStudentAttendanceForUser,
     getAllStudents,
     getAllSubjectsOfBatch,
     registerStudent as registerStudentApi,
@@ -48,6 +49,13 @@ export default function StudentsScreen() {
     const [changeBatchSubjectLoading, setChangeBatchSubjectLoading] = useState(false);
     const [studentForBatchChange, setStudentForBatchChange] = useState<any | null>(null);
     const [studentForProfile, setStudentForProfile] = useState<any | null>(null);
+    const [profileAttendanceSubjects, setProfileAttendanceSubjects] = useState<any[]>([]);
+    const [profileSelectedSubjectId, setProfileSelectedSubjectId] = useState<string | null>(null);
+    const [profileAttendanceEntries, setProfileAttendanceEntries] = useState<any[]>([]);
+    const [profileAttendanceStats, setProfileAttendanceStats] = useState<any | null>(null);
+    const [profileAttendanceLoading, setProfileAttendanceLoading] = useState(false);
+    const [profileAttendanceError, setProfileAttendanceError] = useState('');
+    const profileAttendanceRequestRef = useRef(0);
     const [newBatchIdForStudent, setNewBatchIdForStudent] = useState('');
     const [newSubjectIdsForStudent, setNewSubjectIdsForStudent] = useState<string[]>([]);
     const [form, setForm] = useState({
@@ -298,14 +306,68 @@ export default function StudentsScreen() {
         }
     };
 
+    const resetProfileAttendance = () => {
+        setProfileAttendanceSubjects([]);
+        setProfileSelectedSubjectId(null);
+        setProfileAttendanceEntries([]);
+        setProfileAttendanceStats(null);
+        setProfileAttendanceLoading(false);
+        setProfileAttendanceError('');
+    };
+
+    const fetchProfileAttendance = async (studentId: string, subjectId?: string) => {
+        const requestId = profileAttendanceRequestRef.current + 1;
+        profileAttendanceRequestRef.current = requestId;
+        setProfileAttendanceLoading(true);
+        setProfileAttendanceError('');
+
+        try {
+            const response = await getStudentAttendanceForUser(studentId, subjectId);
+
+            if (profileAttendanceRequestRef.current !== requestId) {
+                return;
+            }
+
+            if (response.data?.success) {
+                const data = response.data?.data || {};
+                setProfileAttendanceSubjects(data.subjects || []);
+                setProfileSelectedSubjectId(data.selectedSubjectId || null);
+                setProfileAttendanceEntries(data.attendanceEntries || []);
+                setProfileAttendanceStats(data.statistics || null);
+            } else {
+                const message = response.data?.message || 'Failed to load attendance.';
+                setProfileAttendanceError(message);
+                setProfileAttendanceEntries([]);
+                setProfileAttendanceStats(null);
+            }
+        } catch (error: any) {
+            if (profileAttendanceRequestRef.current !== requestId) {
+                return;
+            }
+
+            const message = error.response?.data?.message || 'Failed to load attendance.';
+            setProfileAttendanceError(message);
+            setProfileAttendanceEntries([]);
+            setProfileAttendanceStats(null);
+        } finally {
+            if (profileAttendanceRequestRef.current === requestId) {
+                setProfileAttendanceLoading(false);
+            }
+        }
+    };
+
     const openProfileModal = (student: any) => {
         setStudentForProfile(student);
+        resetProfileAttendance();
         setProfileModalVisible(true);
+        void fetchProfileAttendance(student._id);
     };
 
     const closeProfileModal = () => {
+        profileAttendanceRequestRef.current += 1;
         setProfileModalVisible(false);
         setStudentForProfile(null);
+        resetProfileAttendance();
     };
 
     const handleCall = async (phoneNumber?: string) => {
@@ -327,6 +389,38 @@ export default function StudentsScreen() {
         } catch {
             Alert.alert('Error', 'Failed to open the dialer.');
         }
+    };
+
+    const formatAttendanceDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
+    const getAttendancePercentageColor = (percentage: number) => {
+        if (percentage >= 75) return '#16A34A';
+        if (percentage >= 50) return '#F59E0B';
+        return '#DC2626';
+    };
+
+    const handleSelectProfileSubject = (subject: any) => {
+        if (!studentForProfile?._id) {
+            return;
+        }
+
+        setProfileAttendanceEntries([]);
+        setProfileAttendanceStats(null);
+        setProfileSelectedSubjectId(subject._id);
+        void fetchProfileAttendance(studentForProfile._id, subject._id);
+    };
+
+    const handleShowAllProfileSubjects = () => {
+        setProfileSelectedSubjectId(null);
+        setProfileAttendanceEntries([]);
+        setProfileAttendanceStats(null);
     };
 
     const closeChangeBatchModal = () => {
@@ -398,6 +492,60 @@ export default function StudentsScreen() {
         }
     };
 
+    const renderProfileSubjectChip = ({ item }: { item: any }) => {
+        const isSelected = profileSelectedSubjectId === item._id;
+
+        return (
+            <TouchableOpacity
+                style={[styles.profileAttendanceChip, isSelected && styles.profileAttendanceChipActive]}
+                onPress={() => isSelected ? handleShowAllProfileSubjects() : handleSelectProfileSubject(item)}
+            >
+                <Text style={[styles.profileAttendanceChipText, isSelected && styles.profileAttendanceChipTextActive]}>
+                    {item.name}
+                </Text>
+            </TouchableOpacity>
+        );
+    };
+
+    const renderProfileAttendanceItem = (item: any) => {
+        const isPresent = item.status === 'PRESENT';
+        const attendance = item.attendance;
+
+        return (
+            <View key={item._id} style={styles.profileAttendanceCard}>
+                <View
+                    style={[
+                        styles.profileAttendanceStatusDot,
+                        { backgroundColor: isPresent ? '#16A34A' : '#DC2626' },
+                    ]}
+                />
+                <View style={styles.profileAttendanceInfo}>
+                    <Text style={styles.profileAttendanceSubject}>
+                        {attendance?.subject?.name || 'Unknown Subject'}
+                    </Text>
+                    <Text style={styles.profileAttendanceDate}>
+                        {attendance?.date ? formatAttendanceDate(attendance.date) : 'Unknown Date'}
+                    </Text>
+                </View>
+                <View
+                    style={[
+                        styles.profileAttendanceStatusBadge,
+                        { backgroundColor: isPresent ? '#DCFCE7' : '#FEE2E2' },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            styles.profileAttendanceStatusText,
+                            { color: isPresent ? '#16A34A' : '#DC2626' },
+                        ]}
+                    >
+                        {item.status}
+                    </Text>
+                </View>
+            </View>
+        );
+    };
+
     const renderStudentItem = ({ item }: { item: any }) => {
         const isSelected = selectedStudentId === item._id;
         const isDeleting = deletingStudentId === item._id;
@@ -422,7 +570,9 @@ export default function StudentsScreen() {
                             <View style={styles.actionRow}>
                                 <TouchableOpacity
                                     style={styles.viewProfileButton}
-                                    onPress={() => openProfileModal(item)}
+                                    onPress={() => {
+                                        openProfileModal(item);
+                                    }}
                                 >
                                     <Ionicons name="person-circle-outline" size={14} color="#FFFFFF" />
                                     <Text style={styles.actionButtonText}>View Profile</Text>
@@ -471,6 +621,10 @@ export default function StudentsScreen() {
             </TouchableOpacity>
         );
     };
+
+    const selectedProfileSubject = profileAttendanceSubjects.find(
+        (subject) => subject._id === profileSelectedSubjectId
+    );
 
     if (loading && !refreshing) {
         return (
@@ -620,6 +774,108 @@ export default function StudentsScreen() {
                                         <Text style={styles.callButtonText}>Call Mother</Text>
                                     </TouchableOpacity>
                                 </View>
+                            </View>
+
+                            <View style={styles.profileCard}>
+                                <Text style={styles.profileSectionTitle}>Attendance</Text>
+
+                                <View style={styles.profileAttendanceChipListWrapper}>
+                                    <FlatList
+                                        data={profileAttendanceSubjects}
+                                        renderItem={renderProfileSubjectChip}
+                                        keyExtractor={(item) => item._id}
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        contentContainerStyle={styles.profileAttendanceChipContainer}
+                                        style={styles.profileAttendanceChipList}
+                                    />
+                                </View>
+
+                                {profileAttendanceLoading ? (
+                                    <View style={styles.profileAttendanceLoadingWrap}>
+                                        <ActivityIndicator size="small" color="#007AFF" />
+                                    </View>
+                                ) : profileAttendanceError ? (
+                                    <View style={styles.profileAttendanceEmptyState}>
+                                        <Ionicons name="alert-circle-outline" size={28} color="#DC2626" />
+                                        <Text style={styles.profileAttendanceEmptyText}>{profileAttendanceError}</Text>
+                                    </View>
+                                ) : profileAttendanceSubjects.length === 0 ? (
+                                    <View style={styles.profileAttendanceEmptyState}>
+                                        <Ionicons name="book-outline" size={28} color="#CBD5E1" />
+                                        <Text style={styles.profileAttendanceEmptyText}>
+                                            This student is not enrolled in any subject.
+                                        </Text>
+                                    </View>
+                                ) : !profileSelectedSubjectId ? (
+                                    <View style={styles.profileAttendanceEmptyState}>
+                                        <Ionicons name="calendar-outline" size={28} color="#CBD5E1" />
+                                        <Text style={styles.profileAttendanceEmptyText}>
+                                            Select a subject above to view attendance history.
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <>
+                                        {profileAttendanceStats ? (
+                                            <View style={styles.profileAttendanceStatsCard}>
+                                                <Text style={styles.profileAttendanceStatsTitle}>
+                                                    {selectedProfileSubject?.name || 'Selected Subject'}
+                                                </Text>
+                                                <View style={styles.profileAttendanceStatsRow}>
+                                                    <View style={styles.profileAttendanceStatItem}>
+                                                        <Text style={styles.profileAttendanceStatValue}>
+                                                            {profileAttendanceStats.totalClasses}
+                                                        </Text>
+                                                        <Text style={styles.profileAttendanceStatLabel}>Total</Text>
+                                                    </View>
+                                                    <View style={styles.profileAttendanceStatDivider} />
+                                                    <View style={styles.profileAttendanceStatItem}>
+                                                        <Text style={[styles.profileAttendanceStatValue, { color: '#16A34A' }]}>
+                                                            {profileAttendanceStats.present}
+                                                        </Text>
+                                                        <Text style={styles.profileAttendanceStatLabel}>Present</Text>
+                                                    </View>
+                                                    <View style={styles.profileAttendanceStatDivider} />
+                                                    <View style={styles.profileAttendanceStatItem}>
+                                                        <Text style={[styles.profileAttendanceStatValue, { color: '#DC2626' }]}>
+                                                            {profileAttendanceStats.absent}
+                                                        </Text>
+                                                        <Text style={styles.profileAttendanceStatLabel}>Absent</Text>
+                                                    </View>
+                                                    <View style={styles.profileAttendanceStatDivider} />
+                                                    <View style={styles.profileAttendanceStatItem}>
+                                                        <Text
+                                                            style={[
+                                                                styles.profileAttendanceStatValue,
+                                                                {
+                                                                    color: getAttendancePercentageColor(
+                                                                        profileAttendanceStats.attendancePercentage
+                                                                    ),
+                                                                },
+                                                            ]}
+                                                        >
+                                                            {profileAttendanceStats.attendancePercentage}%
+                                                        </Text>
+                                                        <Text style={styles.profileAttendanceStatLabel}>Percentage</Text>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        ) : null}
+
+                                        {profileAttendanceEntries.length === 0 ? (
+                                            <View style={styles.profileAttendanceEmptyState}>
+                                                <Ionicons name="checkmark-circle-outline" size={28} color="#CBD5E1" />
+                                                <Text style={styles.profileAttendanceEmptyText}>
+                                                    No attendance records found for this subject.
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            <View style={styles.profileAttendanceListWrapper}>
+                                                {profileAttendanceEntries.map((entry) => renderProfileAttendanceItem(entry))}
+                                            </View>
+                                        )}
+                                    </>
+                                )}
                             </View>
                         </ScrollView>
 
@@ -1243,6 +1499,146 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#0F172A',
         marginBottom: 10,
+    },
+    profileAttendanceChipListWrapper: {
+        flexShrink: 0,
+    },
+    profileAttendanceChipList: {
+        flexGrow: 0,
+        minHeight: 52,
+        marginBottom: 14,
+    },
+    profileAttendanceChipContainer: {
+        gap: 8,
+        paddingRight: 8,
+        paddingVertical: 4,
+    },
+    profileAttendanceChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        alignSelf: 'flex-start',
+        flexShrink: 0,
+        maxWidth: 220,
+    },
+    profileAttendanceChipActive: {
+        backgroundColor: '#007AFF',
+        borderColor: '#007AFF',
+    },
+    profileAttendanceChipText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#64748B',
+        lineHeight: 18,
+    },
+    profileAttendanceChipTextActive: {
+        color: '#FFFFFF',
+    },
+    profileAttendanceLoadingWrap: {
+        paddingVertical: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    profileAttendanceEmptyState: {
+        paddingVertical: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    profileAttendanceEmptyText: {
+        color: '#94A3B8',
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    profileAttendanceStatsCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 14,
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    profileAttendanceStatsTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1E293B',
+        marginBottom: 14,
+    },
+    profileAttendanceStatsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+    },
+    profileAttendanceStatItem: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    profileAttendanceStatValue: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1E293B',
+    },
+    profileAttendanceStatLabel: {
+        fontSize: 11,
+        color: '#94A3B8',
+        marginTop: 4,
+        fontWeight: '500',
+    },
+    profileAttendanceStatDivider: {
+        width: 1,
+        height: 32,
+        backgroundColor: '#E2E8F0',
+    },
+    profileAttendanceListWrapper: {
+        gap: 10,
+    },
+    profileAttendanceCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        padding: 14,
+        borderRadius: 14,
+        marginBottom: 10,
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    profileAttendanceStatusDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: 12,
+    },
+    profileAttendanceInfo: {
+        flex: 1,
+    },
+    profileAttendanceSubject: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1E293B',
+    },
+    profileAttendanceDate: {
+        fontSize: 12,
+        color: '#64748B',
+        marginTop: 2,
+    },
+    profileAttendanceStatusBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    profileAttendanceStatusText: {
+        fontSize: 12,
+        fontWeight: '700',
     },
     profileRow: {
         flexDirection: 'row',

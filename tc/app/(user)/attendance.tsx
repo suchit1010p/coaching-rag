@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import {
     getAllAttendance,
+    getAttendanceById,
     deleteAttendance,
     getAllBatches,
     getAllSubjectsOfBatch,
@@ -23,7 +24,7 @@ import {
     markAttendance as markAttendanceApi,
 } from '../../services/api';
 
-type Step = 'list' | 'selectBatch' | 'selectSubject' | 'selectDate' | 'markAttendance';
+type Step = 'list' | 'viewAttendance' | 'selectBatch' | 'selectSubject' | 'selectDate' | 'markAttendance';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
@@ -64,6 +65,10 @@ export default function AttendanceScreen() {
 
     // --- Flow step state ---
     const [step, setStep] = useState<Step>('list');
+    const [attendanceDetails, setAttendanceDetails] = useState<any | null>(null);
+    const [attendanceDetailsLoading, setAttendanceDetailsLoading] = useState(false);
+    const [viewingAttendanceId, setViewingAttendanceId] = useState<string | null>(null);
+    const attendanceDetailsRequestRef = useRef<string | null>(null);
 
     // --- Select batch ---
     const [batches, setBatches] = useState<any[]>([]);
@@ -171,6 +176,10 @@ export default function AttendanceScreen() {
     useFocusEffect(
         useCallback(() => {
             const onBackPress = () => {
+                if (step === 'viewAttendance') {
+                    closeAttendanceDetails();
+                    return true;
+                }
                 if (step === 'markAttendance') {
                     Alert.alert(
                         'Discard Attendance?',
@@ -196,6 +205,9 @@ export default function AttendanceScreen() {
 
     const resetFlow = () => {
         setStep('list');
+        setAttendanceDetails(null);
+        setAttendanceDetailsLoading(false);
+        setViewingAttendanceId(null);
         setSelectedBatch(null);
         setBatches([]);
         setSelectedSubject(null);
@@ -216,6 +228,48 @@ export default function AttendanceScreen() {
     const handleTakeAttendance = () => {
         setStep('selectBatch');
         fetchBatches();
+    };
+
+    const closeAttendanceDetails = () => {
+        attendanceDetailsRequestRef.current = null;
+        setStep('list');
+        setAttendanceDetails(null);
+        setAttendanceDetailsLoading(false);
+        setViewingAttendanceId(null);
+    };
+
+    const handleOpenAttendance = async (item: any) => {
+        attendanceDetailsRequestRef.current = item._id;
+        setStep('viewAttendance');
+        setAttendanceDetails(null);
+        setAttendanceDetailsLoading(true);
+        setViewingAttendanceId(item._id);
+
+        try {
+            const response = await getAttendanceById(item._id);
+            if (attendanceDetailsRequestRef.current !== item._id) {
+                return;
+            }
+
+            if (response.data?.success) {
+                setAttendanceDetails(response.data.data || null);
+            } else {
+                Alert.alert('Error', response.data?.message || 'Failed to fetch attendance details');
+                closeAttendanceDetails();
+            }
+        } catch (error: any) {
+            if (attendanceDetailsRequestRef.current !== item._id) {
+                return;
+            }
+
+            Alert.alert('Error', error.response?.data?.message || 'Failed to fetch attendance details');
+            closeAttendanceDetails();
+        } finally {
+            if (attendanceDetailsRequestRef.current === item._id) {
+                setAttendanceDetailsLoading(false);
+                setViewingAttendanceId(null);
+            }
+        }
     };
 
     const handleSelectBatch = (batch: any) => {
@@ -354,6 +408,8 @@ export default function AttendanceScreen() {
     const renderAttendanceItem = ({ item }: { item: any }) => {
         const stats = item.statistics || {};
         const percentage = parseFloat(stats.attendancePercentage || 0);
+        const viewingThisAttendance = viewingAttendanceId === item._id;
+        const deletingThisAttendance = deletingId === item._id;
 
         return (
             <View style={styles.card}>
@@ -367,11 +423,26 @@ export default function AttendanceScreen() {
                     </View>
                     <View style={styles.cardActions}>
                         <TouchableOpacity
+                            style={styles.viewButton}
+                            onPress={() => handleOpenAttendance(item)}
+                            disabled={viewingThisAttendance || deletingThisAttendance}
+                            activeOpacity={0.8}
+                        >
+                            {viewingThisAttendance ? (
+                                <ActivityIndicator size="small" color="#1D4ED8" />
+                            ) : (
+                                <>
+                                    <Ionicons name="eye-outline" size={16} color="#1D4ED8" />
+                                    <Text style={styles.viewButtonText}>View</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             style={styles.deleteButton}
                             onPress={() => confirmDelete(item)}
-                            disabled={deletingId === item._id}
+                            disabled={deletingThisAttendance || viewingThisAttendance}
                         >
-                            {deletingId === item._id ? (
+                            {deletingThisAttendance ? (
                                 <ActivityIndicator size="small" color="#DC2626" />
                             ) : (
                                 <Ionicons name="trash-outline" size={18} color="#DC2626" />
@@ -458,6 +529,32 @@ export default function AttendanceScreen() {
                         {isPresent ? 'P' : 'A'}
                     </Text>
                 </TouchableOpacity>
+            </View>
+        );
+    };
+
+    const renderAttendanceEntryItem = ({ item }: { item: any }) => {
+        const student = item.student || {};
+        const isPresent = item.status === 'PRESENT';
+
+        return (
+            <View style={styles.studentCard}>
+                <View style={styles.studentInfo}>
+                    <View style={styles.rollBadge}>
+                        <Text style={styles.rollBadgeText}>{student.rollNumber ?? '-'}</Text>
+                    </View>
+                    <View style={styles.studentTextWrap}>
+                        <Text style={styles.studentName}>{student.name || 'Unknown Student'}</Text>
+                        <Text style={styles.studentMobile}>
+                            {student.mobile || student.fatherMobile || student.motherMobile || 'No contact available'}
+                        </Text>
+                    </View>
+                </View>
+                <View style={[styles.entryStatusBadge, isPresent ? styles.entryStatusPresent : styles.entryStatusAbsent]}>
+                    <Text style={[styles.entryStatusText, isPresent ? styles.entryStatusPresentText : styles.entryStatusAbsentText]}>
+                        {item.status}
+                    </Text>
+                </View>
             </View>
         );
     };
@@ -727,6 +824,77 @@ export default function AttendanceScreen() {
         );
     }
 
+    // ===================== STEP: VIEW ATTENDANCE =====================
+
+    if (step === 'viewAttendance') {
+        const session = attendanceDetails?.attendance;
+        const stats = attendanceDetails?.statistics || {};
+        const entries = attendanceDetails?.entries || [];
+
+        return (
+            <View style={styles.container}>
+                {renderStepHeader('Attendance Details', closeAttendanceDetails)}
+
+                {attendanceDetailsLoading ? (
+                    <View style={styles.loadingInner}>
+                        <ActivityIndicator size="large" color="#007AFF" />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={entries}
+                        renderItem={renderAttendanceEntryItem}
+                        keyExtractor={(item) => item.student?._id || item._id}
+                        contentContainerStyle={styles.detailListContent}
+                        showsVerticalScrollIndicator={false}
+                        ListHeaderComponent={
+                            <View style={styles.detailSummaryCard}>
+                                <Text style={styles.detailSummaryTitle}>{session?.subject?.name || 'Unknown Subject'}</Text>
+                                <Text style={styles.detailSummarySubtitle}>{session?.batch?.name || 'Unknown Batch'}</Text>
+
+                                <View style={styles.detailMetaRow}>
+                                    <View style={styles.detailMetaBadge}>
+                                        <Ionicons name="calendar-outline" size={14} color="#475569" />
+                                        <Text style={styles.detailMetaText}>
+                                            {session?.date ? formatDate(session.date) : 'Unknown Date'}
+                                        </Text>
+                                    </View>
+                                    {session?.takenBy?.name ? (
+                                        <View style={styles.detailMetaBadge}>
+                                            <Ionicons name="person-outline" size={14} color="#475569" />
+                                            <Text style={styles.detailMetaText}>{session.takenBy.name}</Text>
+                                        </View>
+                                    ) : null}
+                                </View>
+
+                                <View style={styles.detailStatsRow}>
+                                    <View style={[styles.detailStatCard, styles.presentBadge]}>
+                                        <Text style={styles.presentBadgeText}>{stats.present ?? 0}</Text>
+                                        <Text style={styles.detailStatLabel}>Present</Text>
+                                    </View>
+                                    <View style={[styles.detailStatCard, styles.absentBadge]}>
+                                        <Text style={styles.absentBadgeText}>{stats.absent ?? 0}</Text>
+                                        <Text style={styles.detailStatLabel}>Absent</Text>
+                                    </View>
+                                    <View style={[styles.detailStatCard, styles.percentBadge]}>
+                                        <Text style={styles.percentBadgeText}>{stats.attendancePercentage ?? 0}%</Text>
+                                        <Text style={styles.detailStatLabel}>Attendance</Text>
+                                    </View>
+                                </View>
+
+                                <Text style={styles.detailSectionTitle}>Student-wise status</Text>
+                            </View>
+                        }
+                        ListEmptyComponent={
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyText}>No students found for this attendance session.</Text>
+                            </View>
+                        }
+                    />
+                )}
+            </View>
+        );
+    }
+
     // ===================== STEP: LIST (DEFAULT) =====================
 
     return (
@@ -824,6 +992,73 @@ const styles = StyleSheet.create({
     listContent: {
         paddingBottom: 20,
     },
+    detailListContent: {
+        paddingBottom: 20,
+    },
+    detailSummaryCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        padding: 18,
+        marginBottom: 14,
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    detailSummaryTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    detailSummarySubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+        marginTop: 4,
+    },
+    detailMetaRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 14,
+    },
+    detailMetaBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 999,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    detailMetaText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#475569',
+    },
+    detailStatsRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 16,
+    },
+    detailStatCard: {
+        flex: 1,
+        borderRadius: 12,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    detailStatLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#64748B',
+        marginTop: 4,
+    },
+    detailSectionTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#1E293B',
+        marginTop: 18,
+    },
 
     // --- Attendance Card ---
     card: {
@@ -866,6 +1101,23 @@ const styles = StyleSheet.create({
     cardActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
+    },
+    viewButton: {
+        minWidth: 72,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 6,
+        backgroundColor: '#EFF6FF',
+        paddingHorizontal: 12,
+    },
+    viewButtonText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#1D4ED8',
     },
     deleteButton: {
         width: 34,
@@ -1235,6 +1487,29 @@ const styles = StyleSheet.create({
         color: '#15803D',
     },
     toggleAbsentText: {
+        color: '#DC2626',
+    },
+    entryStatusBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 12,
+        minWidth: 86,
+        alignItems: 'center',
+    },
+    entryStatusPresent: {
+        backgroundColor: '#DCFCE7',
+    },
+    entryStatusAbsent: {
+        backgroundColor: '#FEE2E2',
+    },
+    entryStatusText: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    entryStatusPresentText: {
+        color: '#15803D',
+    },
+    entryStatusAbsentText: {
         color: '#DC2626',
     },
 

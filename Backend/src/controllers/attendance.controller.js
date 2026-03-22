@@ -242,13 +242,67 @@ const getAttendanceById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Attendance not found");
     }
 
-    const entries = await AttendanceEntry.find({ attendance: attendanceId, status: "ABSENT" })
-        .populate('student', 'name rollNumber mobile parentName parentMobile')
-        .sort({ 'student.rollNumber': 1 });
+    const subjectId = attendance.subject?._id || attendance.subject;
+
+    const [absentEntries, enrolledStudents] = await Promise.all([
+        AttendanceEntry.find({ attendance: attendanceId, status: "ABSENT" })
+            .populate('student', 'name rollNumber mobile parentName fatherMobile motherMobile')
+            .lean(),
+        StudentSubject.find({ subject: subjectId })
+            .populate('student', 'name rollNumber mobile parentName fatherMobile motherMobile')
+            .lean()
+    ]);
+
+    const entryMap = new Map();
+
+    enrolledStudents.forEach((enrollment) => {
+        const student = enrollment.student;
+
+        if (!student?._id) {
+            return;
+        }
+
+        entryMap.set(student._id.toString(), {
+            _id: student._id.toString(),
+            attendance: attendance._id,
+            student,
+            status: "PRESENT",
+            createdAt: attendance.createdAt,
+            updatedAt: attendance.updatedAt
+        });
+    });
+
+    absentEntries.forEach((entry) => {
+        const student = entry.student;
+
+        if (!student?._id) {
+            return;
+        }
+
+        entryMap.set(student._id.toString(), {
+            _id: entry._id.toString(),
+            attendance: entry.attendance,
+            student,
+            status: "ABSENT",
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt
+        });
+    });
+
+    const entries = Array.from(entryMap.values()).sort((a, b) => {
+        const rollA = Number.isFinite(a.student?.rollNumber) ? a.student.rollNumber : Number.MAX_SAFE_INTEGER;
+        const rollB = Number.isFinite(b.student?.rollNumber) ? b.student.rollNumber : Number.MAX_SAFE_INTEGER;
+
+        if (rollA !== rollB) {
+            return rollA - rollB;
+        }
+
+        return String(a.student?.name || "").localeCompare(String(b.student?.name || ""));
+    });
 
     // Calculate statistics
-    const totalStudents = await getEnrolledStudentCount(attendance.subject?._id || attendance.subject);
-    const absentCount = entries.length;
+    const totalStudents = entries.length;
+    const absentCount = entries.filter((entry) => entry.status === "ABSENT").length;
     const presentCount = Math.max(totalStudents - absentCount, 0);
     const attendancePercentage = totalStudents > 0
         ? ((presentCount / totalStudents) * 100).toFixed(2)

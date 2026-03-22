@@ -152,6 +152,8 @@ export const deleteAllStudentsFromBatch = (batchId: string) =>
 // --- Students ---
 export const registerStudent = (studentData: any) => api.post("/users/registerStudent", studentData);
 export const getAllStudents = () => api.get("/users/get/all/students");
+export const getStudentAttendanceForUser = (studentId: string, subjectId?: string) =>
+    api.get("/users/get/student/attendance", { params: { studentId, ...(subjectId ? { subjectId } : {}) } });
 export const deleteStudent = (studentId: string) => api.delete("/users/deleteStudent", { data: { studentId } });
 export const changeStudentBatch = (studentId: string, newBatchId: string, newSubjectIds: string[]) =>
     api.patch("/users/change/student/changeBatch", { studentId, newBatchId, newSubjectIds });
