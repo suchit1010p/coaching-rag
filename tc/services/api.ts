@@ -148,6 +148,8 @@ export const updateBatchName = (batchId: string, newName: string) =>
 export const deleteBatch = (batchId: string) => api.delete("/users/delete/batch", { data: { batchId } });
 export const deleteAllStudentsFromBatch = (batchId: string) =>
     api.delete("/users/delete/all/students/from/batch", { data: { batchId } });
+export const deleteAllAttendanceFromBatch = (batchId: string) =>
+    api.delete("/users/delete/all/attendance/from/batch", { data: { batchId } });
 
 // --- Students ---
 export const registerStudent = (studentData: any) => api.post("/users/registerStudent", studentData);

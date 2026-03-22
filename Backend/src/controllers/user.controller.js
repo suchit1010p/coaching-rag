@@ -1518,6 +1518,40 @@ const deleteAllStudentsFromBatch = asyncHandler(async (req, res) => {
 
 })
 
+const deleteAllAttendanceFromBatch = asyncHandler(async (req, res) => {
+    const { batchId } = req.body
+
+    if (!batchId || batchId.trim() === "") {
+        throw new ApiError(400, "Batch ID is required")
+    }
+
+    const batch = await Batch.findById(batchId)
+
+    if (!batch) {
+        throw new ApiError(404, "Batch not found")
+    }
+
+    const attendanceIds = await Attendance.find({ batch: batch._id }).distinct("_id")
+
+    if (attendanceIds.length > 0) {
+        await AttendanceEntry.deleteMany({ attendance: { $in: attendanceIds } })
+    }
+
+    const deletedAttendance = await Attendance.deleteMany({ batch: batch._id })
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    deletedAttendanceCount: deletedAttendance.deletedCount || 0
+                },
+                "All attendance of batch deleted successfully"
+            )
+        )
+})
+
 
 
 export {
@@ -1565,6 +1599,7 @@ export {
 
 
     // handle batch at year end
-    deleteAllStudentsFromBatch
+    deleteAllStudentsFromBatch,
+    deleteAllAttendanceFromBatch
     
 }

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
-import { getUserProfile, getAllBatches, deleteBatch, deleteAllStudentsFromBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch, changeUserPassword } from '../../services/api';
+import { getUserProfile, getAllBatches, deleteBatch, deleteAllStudentsFromBatch, deleteAllAttendanceFromBatch, registerUser, getAllSubjectsOfBatch, changeAllStudentsBatch, changeUserPassword } from '../../services/api';
 
 interface Batch {
     _id: string;
@@ -40,6 +40,11 @@ export default function Profile() {
     const [studentDeleteConfirmText, setStudentDeleteConfirmText] = useState('');
     const [showStudentDeleteConfirm, setShowStudentDeleteConfirm] = useState(false);
     const [deletingStudents, setDeletingStudents] = useState(false);
+    const [selectedBatchForAttendanceDelete, setSelectedBatchForAttendanceDelete] = useState<Batch | null>(null);
+    const [attendanceDeleteMenuOpen, setAttendanceDeleteMenuOpen] = useState(false);
+    const [attendanceDeleteConfirmText, setAttendanceDeleteConfirmText] = useState('');
+    const [showAttendanceDeleteConfirm, setShowAttendanceDeleteConfirm] = useState(false);
+    const [deletingAttendance, setDeletingAttendance] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [profileData, setProfileData] = useState<any>(user);
@@ -192,6 +197,52 @@ export default function Profile() {
     const handleCancelDeleteAllStudents = () => {
         setShowStudentDeleteConfirm(false);
         setStudentDeleteConfirmText('');
+    };
+
+    const handleSelectBatchForAttendanceDelete = (batch: Batch) => {
+        setSelectedBatchForAttendanceDelete(batch);
+        setAttendanceDeleteMenuOpen(false);
+        setShowAttendanceDeleteConfirm(false);
+        setAttendanceDeleteConfirmText('');
+    };
+
+    const handleDeleteAllAttendancePress = () => {
+        if (!selectedBatchForAttendanceDelete) {
+            Alert.alert('Error', 'Please select a batch first');
+            return;
+        }
+        setShowAttendanceDeleteConfirm(true);
+        setAttendanceDeleteConfirmText('');
+    };
+
+    const handleConfirmDeleteAllAttendance = async () => {
+        if (!selectedBatchForAttendanceDelete) return;
+
+        const expectedText = `${selectedBatchForAttendanceDelete.name} delete attendance`;
+        if (attendanceDeleteConfirmText.trim() !== expectedText) {
+            Alert.alert('Error', `Please type "${expectedText}" to confirm deletion`);
+            return;
+        }
+
+        setDeletingAttendance(true);
+        try {
+            const res = await deleteAllAttendanceFromBatch(selectedBatchForAttendanceDelete._id);
+            if (res?.data?.success) {
+                Alert.alert('Success', res.data.message || 'All attendance deleted successfully');
+                setSelectedBatchForAttendanceDelete(null);
+                setShowAttendanceDeleteConfirm(false);
+                setAttendanceDeleteConfirmText('');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Failed to delete attendance from batch');
+        } finally {
+            setDeletingAttendance(false);
+        }
+    };
+
+    const handleCancelDeleteAllAttendance = () => {
+        setShowAttendanceDeleteConfirm(false);
+        setAttendanceDeleteConfirmText('');
     };
 
     const handleSelectOldBatch = (batch: Batch) => {
@@ -512,6 +563,118 @@ export default function Profile() {
                                 }
                             >
                                 {deletingStudents ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.confirmDeleteButtonText}>
+                                        Confirm Delete
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+            </View>
+
+            <View style={styles.card}>
+                <Text style={styles.cardTitle}>Delete All Attendance From Batch</Text>
+                <Text style={styles.cardSubtitle}>
+                    This removes all attendance sessions and attendance entries of the selected batch
+                </Text>
+
+                <Text style={styles.fieldLabel}>Select Batch</Text>
+                <TouchableOpacity
+                    style={styles.selectInput}
+                    onPress={() => setAttendanceDeleteMenuOpen((prev) => !prev)}
+                >
+                    <Text
+                        style={[
+                            styles.selectInputText,
+                            !selectedBatchForAttendanceDelete && styles.selectPlaceholder,
+                        ]}
+                    >
+                        {selectedBatchForAttendanceDelete ? selectedBatchForAttendanceDelete.name : 'Select a batch'}
+                    </Text>
+                    <Text style={styles.selectArrow}>{attendanceDeleteMenuOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {attendanceDeleteMenuOpen && (
+                    <ScrollView
+                        style={styles.selectMenu}
+                        nestedScrollEnabled={true}
+                    >
+                        {batches.length === 0 ? (
+                            <View style={styles.selectItem}>
+                                <Text style={styles.selectItemText}>No batches found</Text>
+                            </View>
+                        ) : (
+                            batches.map((batch) => (
+                                <TouchableOpacity
+                                    key={batch._id}
+                                    style={[
+                                        styles.selectItem,
+                                        selectedBatchForAttendanceDelete?._id === batch._id && styles.selectItemActive,
+                                    ]}
+                                    onPress={() => handleSelectBatchForAttendanceDelete(batch)}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.selectItemText,
+                                            selectedBatchForAttendanceDelete?._id === batch._id &&
+                                                styles.selectItemTextActive,
+                                        ]}
+                                    >
+                                        {batch.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))
+                        )}
+                    </ScrollView>
+                )}
+
+                {selectedBatchForAttendanceDelete && !showAttendanceDeleteConfirm && (
+                    <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAllAttendancePress}>
+                        <Text style={styles.deleteButtonText}>Delete All Attendance</Text>
+                    </TouchableOpacity>
+                )}
+
+                {showAttendanceDeleteConfirm && selectedBatchForAttendanceDelete && (
+                    <View style={styles.confirmSection}>
+                        <Text style={styles.confirmLabel}>
+                            Type "<Text style={styles.confirmHighlight}>{selectedBatchForAttendanceDelete.name} delete attendance</Text>" to confirm
+                        </Text>
+                        <TextInput
+                            style={styles.confirmInput}
+                            value={attendanceDeleteConfirmText}
+                            onChangeText={setAttendanceDeleteConfirmText}
+                            placeholder={`${selectedBatchForAttendanceDelete.name} delete attendance`}
+                            placeholderTextColor="#CBD5E1"
+                            autoCapitalize="none"
+                            onFocus={() => {
+                                setTimeout(() => {
+                                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                                }, 300);
+                            }}
+                        />
+                        <View style={styles.confirmButtons}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={handleCancelDeleteAllAttendance}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    styles.confirmDeleteButton,
+                                    attendanceDeleteConfirmText.trim() !== `${selectedBatchForAttendanceDelete.name} delete attendance` &&
+                                        styles.confirmDeleteButtonDisabled,
+                                ]}
+                                onPress={handleConfirmDeleteAllAttendance}
+                                disabled={
+                                    deletingAttendance ||
+                                    attendanceDeleteConfirmText.trim() !== `${selectedBatchForAttendanceDelete.name} delete attendance`
+                                }
+                            >
+                                {deletingAttendance ? (
                                     <ActivityIndicator size="small" color="#FFFFFF" />
                                 ) : (
                                     <Text style={styles.confirmDeleteButtonText}>
