@@ -28,6 +28,7 @@ import {
     getAllSubjectsOfBatch,
     registerStudent as registerStudentApi,
     registerStudentsBulk as registerStudentsBulkApi,
+    updateStudentDetails as updateStudentDetailsApi,
 } from '../../../services/api';
 
 type BulkStudentPayload = {
@@ -138,6 +139,9 @@ export default function StudentsScreen() {
     const [changingBatchStudentId, setChangingBatchStudentId] = useState<string | null>(null);
     const [registerModalVisible, setRegisterModalVisible] = useState(false);
     const [registeringStudent, setRegisteringStudent] = useState(false);
+    const [editStudentModalVisible, setEditStudentModalVisible] = useState(false);
+    const [updatingStudentDetails, setUpdatingStudentDetails] = useState(false);
+    const [studentForEdit, setStudentForEdit] = useState<any | null>(null);
     const [bulkRegisterModalVisible, setBulkRegisterModalVisible] = useState(false);
     const [bulkParsingFile, setBulkParsingFile] = useState(false);
     const [bulkRegisteringStudents, setBulkRegisteringStudents] = useState(false);
@@ -170,6 +174,15 @@ export default function StudentsScreen() {
     const profileAttendanceRequestRef = useRef(0);
     const [newBatchIdForStudent, setNewBatchIdForStudent] = useState('');
     const [newSubjectIdsForStudent, setNewSubjectIdsForStudent] = useState<string[]>([]);
+    const [editForm, setEditForm] = useState({
+        rollNumber: '',
+        name: '',
+        mobile: '',
+        email: '',
+        parentName: '',
+        fatherMobile: '',
+        motherMobile: '',
+    });
     const [form, setForm] = useState({
         rollNumber: '',
         name: '',
@@ -258,6 +271,42 @@ export default function StudentsScreen() {
         setRegisterModalVisible(true);
     };
 
+    const resetEditForm = () => {
+        setEditForm({
+            rollNumber: '',
+            name: '',
+            mobile: '',
+            email: '',
+            parentName: '',
+            fatherMobile: '',
+            motherMobile: '',
+        });
+        setStudentForEdit(null);
+    };
+
+    const openEditStudentModal = (student: any) => {
+        setStudentForEdit(student);
+        setEditForm({
+            rollNumber: String(student?.rollNumber ?? ''),
+            name: student?.name || '',
+            mobile: student?.mobile || '',
+            email: student?.email || '',
+            parentName: student?.parentName || '',
+            fatherMobile: student?.fatherMobile || '',
+            motherMobile: student?.motherMobile || '',
+        });
+        setEditStudentModalVisible(true);
+    };
+
+    const closeEditStudentModal = () => {
+        if (updatingStudentDetails) {
+            return;
+        }
+
+        setEditStudentModalVisible(false);
+        resetEditForm();
+    };
+
     const resetBulkRegisterForm = () => {
         setBulkBatchId('');
         setBulkSubjectIds([]);
@@ -325,6 +374,10 @@ export default function StudentsScreen() {
 
     const updateField = (key: string, value: string) => {
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const updateEditField = (key: string, value: string) => {
+        setEditForm((prev) => ({ ...prev, [key]: value }));
     };
 
     const handleSelectBatch = async (batchId: string) => {
@@ -412,6 +465,79 @@ export default function StudentsScreen() {
             Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to register student.');
         } finally {
             setRegisteringStudent(false);
+        }
+    };
+
+    const handleUpdateStudentDetails = async () => {
+        if (
+            !studentForEdit?._id ||
+            !editForm.rollNumber.trim() ||
+            !editForm.name.trim() ||
+            !editForm.mobile.trim() ||
+            !editForm.email.trim() ||
+            !editForm.parentName.trim() ||
+            !editForm.fatherMobile.trim() ||
+            !editForm.motherMobile.trim()
+        ) {
+            Alert.alert('Error', 'Please fill all student details.');
+            return;
+        }
+
+        setUpdatingStudentDetails(true);
+
+        try {
+            const payload = {
+                studentId: studentForEdit._id,
+                rollNumber: Number(editForm.rollNumber),
+                name: editForm.name.trim(),
+                mobile: editForm.mobile.trim(),
+                email: editForm.email.trim(),
+                parentName: editForm.parentName.trim(),
+                fatherMobile: editForm.fatherMobile.trim(),
+                motherMobile: editForm.motherMobile.trim(),
+            };
+
+            const response = await updateStudentDetailsApi(payload);
+
+            if (!response.data?.success || !response.data?.data?._id) {
+                throw new Error(response.data?.message || 'Failed to update student details.');
+            }
+
+            const updatedStudent = response.data.data;
+            const batchName =
+                (typeof updatedStudent.batch === 'object' && updatedStudent.batch !== null
+                    ? updatedStudent.batch?.name
+                    : null) ||
+                studentForEdit.batchName ||
+                studentForEdit.batch?.name ||
+                'Unknown Batch';
+            const mergedStudent = {
+                ...studentForEdit,
+                ...updatedStudent,
+                batchName,
+            };
+
+            setStudents((prev) =>
+                prev.map((student) => (student._id === mergedStudent._id ? mergedStudent : student))
+            );
+
+            if (studentForProfile?._id === mergedStudent._id) {
+                setStudentForProfile(mergedStudent);
+            }
+
+            setEditStudentModalVisible(false);
+            resetEditForm();
+            Alert.alert(
+                'Success',
+                response.data?.message || 'Student details updated and verification email sent again.'
+            );
+        } catch (error: any) {
+            Alert.alert(
+                'Error',
+                error.response?.data?.message || error.message || 'Failed to update student details.'
+            );
+        } finally {
+            setUpdatingStudentDetails(false);
         }
     };
 
@@ -876,6 +1002,13 @@ export default function StudentsScreen() {
                                     <Text style={styles.actionButtonText}>View Profile</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
+                                    style={styles.editStudentButton}
+                                    onPress={() => openEditStudentModal(item)}
+                                >
+                                    <Ionicons name="create-outline" size={14} color="#FFFFFF" />
+                                    <Text style={styles.actionButtonText}>Edit Details</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
                                     style={styles.changeBatchButton}
                                     onPress={() => openChangeBatchModal(item)}
                                     disabled={isChangingBatch}
@@ -1193,6 +1326,123 @@ export default function StudentsScreen() {
                                 onPress={closeProfileModal}
                             >
                                 <Text style={styles.saveButtonText}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                animationType="slide"
+                transparent
+                visible={editStudentModalVisible}
+                onRequestClose={closeEditStudentModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Edit Student Details</Text>
+                            <TouchableOpacity onPress={closeEditStudentModal} disabled={updatingStudentDetails}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                            <View style={styles.bulkInfoCard}>
+                                <Text style={styles.bulkInfoTitle}>Update student details</Text>
+                                <Text style={styles.bulkInfoText}>
+                                    Saving changes will mark the student unverified and send a fresh verification email.
+                                </Text>
+                            </View>
+
+                            <Text style={styles.label}>Roll Number</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.rollNumber}
+                                onChangeText={(value) => updateEditField('rollNumber', value)}
+                                keyboardType="number-pad"
+                                placeholder="Enter roll number"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Student Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.name}
+                                onChangeText={(value) => updateEditField('name', value)}
+                                placeholder="Enter student name"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Email</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.email}
+                                onChangeText={(value) => updateEditField('email', value)}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                placeholder="Enter email"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.mobile}
+                                onChangeText={(value) => updateEditField('mobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter mobile number"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Parent Name</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.parentName}
+                                onChangeText={(value) => updateEditField('parentName', value)}
+                                placeholder="Enter parent name"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Father Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.fatherMobile}
+                                onChangeText={(value) => updateEditField('fatherMobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter father mobile"
+                                placeholderTextColor="#94A3B8"
+                            />
+
+                            <Text style={styles.label}>Mother Mobile</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={editForm.motherMobile}
+                                onChangeText={(value) => updateEditField('motherMobile', value)}
+                                keyboardType="phone-pad"
+                                placeholder="Enter mother mobile"
+                                placeholderTextColor="#94A3B8"
+                            />
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={closeEditStudentModal}
+                                disabled={updatingStudentDetails}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={handleUpdateStudentDetails}
+                                disabled={updatingStudentDetails}
+                            >
+                                {updatingStudentDetails ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Update Details</Text>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1909,6 +2159,17 @@ const styles = StyleSheet.create({
     },
     viewProfileButton: {
         backgroundColor: '#0F766E',
+        borderRadius: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        width: '100%',
+    },
+    editStudentButton: {
+        backgroundColor: '#7C3AED',
         borderRadius: 10,
         paddingVertical: 8,
         paddingHorizontal: 12,

@@ -9,6 +9,7 @@ import {
     registerStudent,
     bulkStudentsRegistration,
     deleteStudent,
+    updateStudentDetails,
     createBatch,
     deleteBatch,
     changeStudentBatch,
@@ -46,6 +47,7 @@ router.route("/change-password").patch(verifyJWT, changeCurrentUserPassword)
 router.route("/registerStudent").post(verifyJWT, registerStudent)
 router.route("/registerStudentsBulk").post(verifyJWT, bulkStudentsRegistration)
 router.route("/deleteStudent").delete(verifyJWT, deleteStudent)
+router.route("/updateStudent").patch(verifyJWT, updateStudentDetails)
 
 // Batch routes
 router.route("/create/batch").post(verifyJWT, createBatch)

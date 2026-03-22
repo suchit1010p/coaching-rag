@@ -166,7 +166,6 @@ export const sendVerificationEmail = async (email, name, verificationUrl, batchN
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('Verification email sent: %s', info.messageId);
         return info;
     } catch (error) {
         console.error('Error sending verification email:', error);
@@ -315,7 +314,6 @@ export const sendAbsenceEmail = async (email, studentName, subjectName, batchNam
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('Absence email sent to %s: %s', email, info.messageId);
         return info;
     } catch (error) {
         console.error('Error sending absence email to %s:', email, error);

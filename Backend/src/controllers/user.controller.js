@@ -12,9 +12,8 @@ import { AttendanceEntry } from "../models/attendanceEntry.model.js";
 import { Unit } from "../models/unit.model.js";
 import { Material } from "../models/material.model.js";
 import { sendVerificationEmail, sendTeacherRegistrationEmail } from "../utils/mail.js";
-import { uploadVerificationFile } from "../utils/s3.js";
+import { uploadVerificationFile, deleteFromS3 } from "../utils/s3.js";
 import { Attendance } from "../models/attendance.model.js";
-import { deleteVerificationFile, deleteFromS3 } from "../utils/s3.js";
 
 const getCookieMaxAges = () => {
     const accessTokenCookieDays = Number(process.env.ACCESS_TOKEN_COOKIE_DAYS || 1);
@@ -24,6 +23,13 @@ const getCookieMaxAges = () => {
         accessTokenMaxAge: accessTokenCookieDays * 24 * 60 * 60 * 1000,
         refreshTokenMaxAge: refreshTokenCookieDays * 24 * 60 * 60 * 1000
     };
+};
+
+const sendStudentVerificationMail = async ({ studentId, email, name, batchName, mobile, password }) => {
+    const presignedUrl = await uploadVerificationFile(studentId, email);
+    const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email?token=${encodeURIComponent(presignedUrl)}`;
+
+    await sendVerificationEmail(email, name, verificationUrl, batchName, mobile, password);
 };
 
 const getCookieOptions = () => {
@@ -285,10 +291,14 @@ const registerStudent = asyncHandler(async (req, res) => {
     }
 
     // Upload verification file to S3 and get presigned URL
-    const presignedUrl = await uploadVerificationFile(student._id.toString(), normalizedEmail);
-    const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email?token=${encodeURIComponent(presignedUrl)}`;
-
-    await sendVerificationEmail(normalizedEmail, studentUser.name, verificationUrl, studentUser.batch.name, studentUser.mobile, password);
+    await sendStudentVerificationMail({
+        studentId: student._id.toString(),
+        email: normalizedEmail,
+        name: studentUser.name,
+        batchName: studentUser.batch.name,
+        mobile: studentUser.mobile,
+        password
+    });
 
     return res
         .status(201)
@@ -505,10 +515,14 @@ const sendVerificationEmailInBulk = async (mailsData) => {
 
     const results = await Promise.allSettled(
         mailsData.map(async (mailData) => {
-            const presignedUrl = await uploadVerificationFile(mailData.id, mailData.email);
-            const verificationUrl = `${process.env.BACKEND_URL || 'http://localhost:8000'}/api/v1/students/verify-email?token=${encodeURIComponent(presignedUrl)}`;
-
-            await sendVerificationEmail(mailData.email, mailData.name, verificationUrl, mailData.batchName, mailData.mobile, mailData.password);
+            await sendStudentVerificationMail({
+                studentId: mailData.id,
+                email: mailData.email,
+                name: mailData.name,
+                batchName: mailData.batchName,
+                mobile: mailData.mobile,
+                password: mailData.password
+            });
         })
     )
 
@@ -730,6 +744,109 @@ const deleteStudent = asyncHandler(async (req, res) => {
         )
 })
 
+const updateStudentDetails = asyncHandler(async (req, res) => {
+    const { studentId, rollNumber, name, email, mobile, parentName, fatherMobile, motherMobile } = req.body
+
+    if (
+        !studentId ||
+        studentId.trim() === "" ||
+        rollNumber === undefined ||
+        rollNumber === null ||
+        !name ||
+        !email ||
+        !mobile ||
+        !parentName ||
+        !fatherMobile ||
+        !motherMobile
+    ) {
+        throw new ApiError(400, "All fields are required")
+    }
+
+    const student = await Student.findById(studentId)
+
+    if (!student) {
+        throw new ApiError(404, "Student not found")
+    }
+
+    const normalizedRollNumber = Number(rollNumber)
+    if (Number.isNaN(normalizedRollNumber)) {
+        throw new ApiError(400, "Roll number must be a valid number")
+    }
+
+    const normalizedName = name.trim()
+    const normalizedEmail = email.toLowerCase().trim()
+    const normalizedMobile = mobile.trim()
+    const normalizedParentName = parentName.trim()
+    const normalizedFatherMobile = fatherMobile.trim()
+    const normalizedMotherMobile = motherMobile.trim()
+
+    const mobileExists = await Student.findOne({
+        mobile: normalizedMobile,
+        _id: { $ne: student._id }
+    })
+
+    if (mobileExists) {
+        throw new ApiError(409, "Student with this mobile number already exists")
+    }
+
+    const emailExists = await Student.findOne({
+        email: normalizedEmail,
+        _id: { $ne: student._id }
+    })
+
+    if (emailExists) {
+        throw new ApiError(409, "Student with this email already exists")
+    }
+
+    const rollNumberExists = await Student.findOne({
+        rollNumber: normalizedRollNumber,
+        batch: student.batch,
+        _id: { $ne: student._id }
+    })
+
+    if (rollNumberExists) {
+        throw new ApiError(409, "Roll number already exists in this batch")
+    }
+
+    student.rollNumber = normalizedRollNumber
+    student.name = normalizedName
+    student.email = normalizedEmail
+    student.mobile = normalizedMobile
+    student.parentName = normalizedParentName
+    student.fatherMobile = normalizedFatherMobile
+    student.motherMobile = normalizedMotherMobile
+    student.isVerified = false
+    student.refreshToken = null
+    await student.save()
+
+    const updatedStudent = await Student.findById(student._id)
+        .select("-password -refreshToken")
+        .populate("batch", "name")
+
+    if (!updatedStudent) {
+        throw new ApiError(500, "Failed to fetch updated student")
+    }
+
+    await sendStudentVerificationMail({
+        studentId: student._id.toString(),
+        email: updatedStudent.email,
+        name: updatedStudent.name,
+        batchName: updatedStudent.batch?.name || "",
+        mobile: updatedStudent.mobile,
+        password: "Your current password (unchanged)"
+    })
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                updatedStudent,
+                "Student details updated successfully. Verification email sent again."
+            )
+        )
+})
+
 // create batch
 const createBatch = asyncHandler(async (req, res) => {
     const { name } = req.body
@@ -874,6 +991,12 @@ const changeStudentBatch = asyncHandler(async (req, res) => {
 
     if (!newBatch) {
         throw new ApiError(404, "New Batch not found")
+    }
+
+    const checkExistingRollNumber = await Student.findOne({ rollNumber: student.rollNumber, batch: newBatch._id })
+
+    if (checkExistingRollNumber) {
+        throw new ApiError(409, "Another student with the same roll number exists in the new batch")
     }
 
     const subjects = await Subject.find({ _id: { $in: newSubjectIds }, batch: newBatch._id })
@@ -1410,6 +1533,7 @@ export {
     registerStudent,
     bulkStudentsRegistration,
     deleteStudent,
+    updateStudentDetails,
 
     // batch functions
     createBatch,
