@@ -151,6 +151,8 @@ export const deleteAllStudentsFromBatch = (batchId: string) =>
 
 // --- Students ---
 export const registerStudent = (studentData: any) => api.post("/users/registerStudent", studentData);
+export const registerStudentsBulk = (studentsData: any[], batchId: string, subjects: string[]) =>
+    api.post("/users/registerStudentsBulk", { studentsData, batchId, subjects });
 export const getAllStudents = () => api.get("/users/get/all/students");
 export const getStudentAttendanceForUser = (studentId: string, subjectId?: string) =>
     api.get("/users/get/student/attendance", { params: { studentId, ...(subjectId ? { subjectId } : {}) } });

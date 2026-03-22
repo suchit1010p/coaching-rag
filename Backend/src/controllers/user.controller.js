@@ -305,6 +305,46 @@ const normalizeBulkStudentField = (value) => {
     return String(value).trim()
 }
 
+const BULK_STUDENT_FIELD_ALIASES = {
+    name: ["name", "student name", "student"],
+    mobile: ["mobile", "mobile number", "student mobile", "phone", "phone number"],
+    email: ["email", "email address", "mail"],
+    dateOfBirth: ["dateOfBirth", "Date-of-birth", "Date-of-Birth", "date-of-birth", "date of birth", "dob"],
+    parentName: ["parentName", "parent name", "parentname"],
+    fatherMobile: ["fatherMobile", "father mobile number", "father mobile", "father mobile no"],
+    motherMobile: ["motherMobile", "mother mobile number", "mother mobile", "mother mobile no"]
+}
+
+const normalizeBulkStudentKey = (value) => {
+    return normalizeBulkStudentField(value)
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+}
+
+const buildBulkStudentLookup = (student) => {
+    if (!student || typeof student !== "object" || Array.isArray(student)) {
+        return {}
+    }
+
+    return Object.entries(student).reduce((lookup, [key, value]) => {
+        lookup[normalizeBulkStudentKey(key)] = value
+        return lookup
+    }, {})
+}
+
+const getBulkStudentMappedField = (lookup, aliases) => {
+    for (const alias of aliases) {
+        const value = normalizeBulkStudentField(lookup[normalizeBulkStudentKey(alias)])
+
+        if (value !== "") {
+            return value
+        }
+    }
+
+    return ""
+}
+
 const bulkStudentsRegistration = asyncHandler(async (req, res) => {
     const { studentsData, batchId, subjects } = req.body
 
@@ -343,20 +383,21 @@ const bulkStudentsRegistration = asyncHandler(async (req, res) => {
 
     for (let i = 0; i < studentsData.length; i++) {
         const rawStudent = studentsData[i]
-        const rowNumber = i + 1
+        const rowNumber = Number(rawStudent?.sourceRowNumber) || i + 1
 
         if (!rawStudent || typeof rawStudent !== "object" || Array.isArray(rawStudent)) {
             studentErrors.push(`Row ${rowNumber}: Invalid student data`)
             continue
         }
 
-        const name = normalizeBulkStudentField(rawStudent.name)
-        const mobile = normalizeBulkStudentField(rawStudent.mobile)
-        const email = normalizeBulkStudentField(rawStudent.email).toLowerCase()
-        const password = normalizeBulkStudentField(rawStudent["Date-of-Birth"])
-        const parentName = normalizeBulkStudentField(rawStudent.parentName)
-        const fatherMobile = normalizeBulkStudentField(rawStudent.fatherMobile)
-        const motherMobile = normalizeBulkStudentField(rawStudent.motherMobile)
+        const bulkStudentLookup = buildBulkStudentLookup(rawStudent)
+        const name = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.name)
+        const mobile = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.mobile)
+        const email = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.email).toLowerCase()
+        const password = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.dateOfBirth)
+        const parentName = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.parentName)
+        const fatherMobile = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.fatherMobile)
+        const motherMobile = getBulkStudentMappedField(bulkStudentLookup, BULK_STUDENT_FIELD_ALIASES.motherMobile)
         const rollNumber = i + 1
 
         if (!name || !mobile || !email || !password || !parentName || !fatherMobile || !motherMobile) {

@@ -14,7 +14,10 @@ import {
     Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
+import * as XLSX from 'xlsx';
 import {
     addStudentToSubject,
     changeStudentBatch as changeStudentBatchApi,
@@ -24,7 +27,104 @@ import {
     getAllStudents,
     getAllSubjectsOfBatch,
     registerStudent as registerStudentApi,
+    registerStudentsBulk as registerStudentsBulkApi,
 } from '../../../services/api';
+
+type BulkStudentPayload = {
+    name: string;
+    mobile: string;
+    email: string;
+    dateOfBirth: string;
+    parentName: string;
+    fatherMobile: string;
+    motherMobile: string;
+};
+
+type ParsedBulkStudent = BulkStudentPayload & {
+    sourceRowNumber: number;
+};
+
+const BULK_STUDENT_HEADERS: Record<keyof BulkStudentPayload, string[]> = {
+    name: ['name', 'student name', 'student'],
+    mobile: ['mobile', 'mobile number', 'student mobile', 'phone', 'phone number'],
+    email: ['email', 'email address', 'mail'],
+    dateOfBirth: ['Date-of-birth', 'Date-of-Birth', 'date-of-birth', 'date of birth', 'dob', 'dateOfBirth'],
+    parentName: ['parent name', 'parentName', 'parentname'],
+    fatherMobile: ['father mobile number', 'father mobile', 'fatherMobile', 'father mobile no'],
+    motherMobile: ['mother mobile number', 'mother mobile', 'motherMobile', 'mother mobile no'],
+};
+
+const normalizeSheetHeader = (value: unknown) =>
+    String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+
+const normalizeSheetCell = (value: unknown) => {
+    if (value === undefined || value === null) {
+        return '';
+    }
+
+    return String(value).trim();
+};
+
+const getSheetRowValue = (row: Record<string, unknown>, aliases: string[]) => {
+    const rowEntries = Object.entries(row);
+
+    for (const alias of aliases) {
+        const normalizedAlias = normalizeSheetHeader(alias);
+        const matchedEntry = rowEntries.find(([key]) => normalizeSheetHeader(key) === normalizedAlias);
+
+        if (matchedEntry) {
+            return normalizeSheetCell(matchedEntry[1]);
+        }
+    }
+
+    return '';
+};
+
+const buildBulkStudentsFromSheet = (rows: Record<string, unknown>[]): ParsedBulkStudent[] =>
+    rows
+        .map((row, index) => ({
+            sourceRowNumber: index + 2,
+            name: getSheetRowValue(row, BULK_STUDENT_HEADERS.name),
+            mobile: getSheetRowValue(row, BULK_STUDENT_HEADERS.mobile),
+            email: getSheetRowValue(row, BULK_STUDENT_HEADERS.email),
+            dateOfBirth: getSheetRowValue(row, BULK_STUDENT_HEADERS.dateOfBirth),
+            parentName: getSheetRowValue(row, BULK_STUDENT_HEADERS.parentName),
+            fatherMobile: getSheetRowValue(row, BULK_STUDENT_HEADERS.fatherMobile),
+            motherMobile: getSheetRowValue(row, BULK_STUDENT_HEADERS.motherMobile),
+        }))
+        .filter((student) =>
+            Object.entries(student).some(([key, value]) => key !== 'sourceRowNumber' && value !== '')
+        );
+
+const formatBulkRegistrationMessage = (resultData: any) => {
+    const createdCount = Number(resultData?.createdCount || 0);
+    const failedCount = Number(resultData?.failedCount || 0);
+    const emailFailedCount = Number(resultData?.emailFailedCount || 0);
+    const errors = Array.isArray(resultData?.errors)
+        ? resultData.errors.filter((item: unknown) => typeof item === 'string' && item.trim())
+        : [];
+
+    const lines = [`Created: ${createdCount}`, `Failed: ${failedCount}`];
+
+    if (emailFailedCount > 0) {
+        lines.push(`Email failed: ${emailFailedCount}`);
+    }
+
+    if (errors.length > 0) {
+        const issuePreview = errors.slice(0, 4).join('\n');
+        lines.push(`Issues:\n${issuePreview}${errors.length > 4 ? '\n...' : ''}`);
+    }
+
+    return {
+        createdCount,
+        title: createdCount > 0 ? 'Bulk registration completed' : 'Bulk registration failed',
+        message: lines.join('\n'),
+    };
+};
 
 export default function StudentsScreen() {
     const [students, setStudents] = useState<any[]>([]);
@@ -38,6 +138,18 @@ export default function StudentsScreen() {
     const [changingBatchStudentId, setChangingBatchStudentId] = useState<string | null>(null);
     const [registerModalVisible, setRegisterModalVisible] = useState(false);
     const [registeringStudent, setRegisteringStudent] = useState(false);
+    const [bulkRegisterModalVisible, setBulkRegisterModalVisible] = useState(false);
+    const [bulkParsingFile, setBulkParsingFile] = useState(false);
+    const [bulkRegisteringStudents, setBulkRegisteringStudents] = useState(false);
+    const [bulkBatchMenuOpen, setBulkBatchMenuOpen] = useState(false);
+    const [bulkSubjectMenuOpen, setBulkSubjectMenuOpen] = useState(false);
+    const [bulkSubjectLoading, setBulkSubjectLoading] = useState(false);
+    const [bulkBatchId, setBulkBatchId] = useState('');
+    const [bulkSubjectIds, setBulkSubjectIds] = useState<string[]>([]);
+    const [bulkSubjects, setBulkSubjects] = useState<any[]>([]);
+    const [bulkFileName, setBulkFileName] = useState('');
+    const [bulkStudentsData, setBulkStudentsData] = useState<ParsedBulkStudent[]>([]);
+    const [bulkParseError, setBulkParseError] = useState('');
     const [profileModalVisible, setProfileModalVisible] = useState(false);
     const [subjectLoading, setSubjectLoading] = useState(false);
     const [batchMenuOpen, setBatchMenuOpen] = useState(false);
@@ -146,6 +258,35 @@ export default function StudentsScreen() {
         setRegisterModalVisible(true);
     };
 
+    const resetBulkRegisterForm = () => {
+        setBulkBatchId('');
+        setBulkSubjectIds([]);
+        setBulkSubjects([]);
+        setBulkFileName('');
+        setBulkStudentsData([]);
+        setBulkParseError('');
+        setBulkBatchMenuOpen(false);
+        setBulkSubjectMenuOpen(false);
+    };
+
+    const handleOpenBulkRegisterModal = () => {
+        resetBulkRegisterForm();
+        setBulkRegisterModalVisible(true);
+    };
+
+    const closeBulkRegisterModal = (force = false) => {
+        if (!force && (bulkParsingFile || bulkRegisteringStudents)) {
+            return;
+        }
+
+        setBulkRegisterModalVisible(false);
+        resetBulkRegisterForm();
+    };
+
+    const handleCloseBulkRegisterModal = () => {
+        closeBulkRegisterModal();
+    };
+
     const fetchSubjectsForBatch = async (batchId: string) => {
         setSubjectLoading(true);
         try {
@@ -161,6 +302,24 @@ export default function StudentsScreen() {
             Alert.alert('Error', 'Failed to load subjects for selected batch.');
         } finally {
             setSubjectLoading(false);
+        }
+    };
+
+    const fetchBulkSubjectsForBatch = async (batchId: string) => {
+        setBulkSubjectLoading(true);
+        try {
+            const response = await getAllSubjectsOfBatch(batchId);
+            if (response.data?.success) {
+                setBulkSubjects(response.data?.data || []);
+            } else {
+                setBulkSubjects([]);
+            }
+        } catch (error) {
+            console.error('Error fetching bulk register subjects:', error);
+            setBulkSubjects([]);
+            Alert.alert('Error', 'Failed to load subjects for selected batch.');
+        } finally {
+            setBulkSubjectLoading(false);
         }
     };
 
@@ -182,6 +341,22 @@ export default function StudentsScreen() {
                 ? prev.subjectIds.filter((id) => id !== subjectId)
                 : [...prev.subjectIds, subjectId],
         }));
+    };
+
+    const handleSelectBulkBatch = async (batchId: string) => {
+        setBulkBatchId(batchId);
+        setBulkSubjectIds([]);
+        setBulkBatchMenuOpen(false);
+        setBulkSubjectMenuOpen(false);
+        await fetchBulkSubjectsForBatch(batchId);
+    };
+
+    const handleToggleBulkSubject = (subjectId: string) => {
+        setBulkSubjectIds((prev) =>
+            prev.includes(subjectId)
+                ? prev.filter((id) => id !== subjectId)
+                : [...prev, subjectId]
+        );
     };
 
     const handleRegisterStudent = async () => {
@@ -237,6 +412,129 @@ export default function StudentsScreen() {
             Alert.alert('Error', error.response?.data?.message || error.message || 'Failed to register student.');
         } finally {
             setRegisteringStudent(false);
+        }
+    };
+
+    const handlePickBulkRegisterFile = async () => {
+        setBulkParsingFile(true);
+        setBulkParseError('');
+
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: [
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'application/vnd.ms-excel',
+                ],
+                copyToCacheDirectory: true,
+                multiple: false,
+            });
+
+            if (result.canceled || !result.assets?.length) {
+                return;
+            }
+
+            const selectedFile = result.assets[0];
+            const fileName = selectedFile.name || 'students.xlsx';
+
+            if (!/\.(xlsx|xls)$/i.test(fileName)) {
+                throw new Error('Please select a valid .xlsx or .xls file.');
+            }
+
+            const fileContent = await FileSystem.readAsStringAsync(selectedFile.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            const workbook = XLSX.read(fileContent, { type: 'base64' });
+            const firstSheetName = workbook.SheetNames[0];
+
+            if (!firstSheetName) {
+                throw new Error('The uploaded workbook does not contain any sheets.');
+            }
+
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+                defval: '',
+                raw: false,
+            });
+            const parsedStudents = buildBulkStudentsFromSheet(rows);
+
+            if (parsedStudents.length === 0) {
+                throw new Error(
+                    'No student rows were found. Use columns: name, mobile, email, Date-of-birth, parent name, father mobile number, mother mobile number.'
+                );
+            }
+
+            setBulkFileName(fileName);
+            setBulkStudentsData(parsedStudents);
+        } catch (error: any) {
+            const message = error.message || 'Failed to read the selected file.';
+            setBulkFileName('');
+            setBulkStudentsData([]);
+            setBulkParseError(message);
+            Alert.alert('File Error', message);
+        } finally {
+            setBulkParsingFile(false);
+        }
+    };
+
+    const handleBulkRegisterStudents = async () => {
+        if (!bulkBatchId) {
+            Alert.alert('Error', 'Please select a batch.');
+            return;
+        }
+
+        if (bulkSubjectIds.length === 0) {
+            Alert.alert('Error', 'Please select at least one subject.');
+            return;
+        }
+
+        if (bulkStudentsData.length === 0) {
+            Alert.alert('Error', 'Please upload an XLSX file with student data.');
+            return;
+        }
+
+        setBulkRegisteringStudents(true);
+
+        try {
+            const payload = bulkStudentsData.map((student) => ({
+                sourceRowNumber: student.sourceRowNumber,
+                name: student.name,
+                mobile: student.mobile,
+                email: student.email,
+                dateOfBirth: student.dateOfBirth,
+                parentName: student.parentName,
+                fatherMobile: student.fatherMobile,
+                motherMobile: student.motherMobile,
+            }));
+
+            const response = await registerStudentsBulkApi(payload, bulkBatchId, bulkSubjectIds);
+            const summary = formatBulkRegistrationMessage(response.data?.data);
+
+            Alert.alert(summary.title, summary.message);
+
+            if (summary.createdCount > 0) {
+                closeBulkRegisterModal(true);
+                fetchStudents();
+            }
+        } catch (error: any) {
+            const responseData = error.response?.data;
+            const resultData = responseData?.data;
+
+            if (resultData) {
+                const summary = formatBulkRegistrationMessage(resultData);
+                Alert.alert(summary.title, summary.message);
+
+                if (summary.createdCount > 0) {
+                    closeBulkRegisterModal(true);
+                    fetchStudents();
+                }
+            } else {
+                Alert.alert(
+                    'Error',
+                    responseData?.message || error.message || 'Failed to register students in bulk.'
+                );
+            }
+        } finally {
+            setBulkRegisteringStudents(false);
         }
     };
 
@@ -643,14 +941,24 @@ export default function StudentsScreen() {
                         {filteredStudents.length} of {students.length} students
                     </Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.registerBtn}
-                    activeOpacity={0.85}
-                    onPress={handleOpenRegisterModal}
-                >
-                    <Ionicons name="person-add" size={16} color="#FFFFFF" />
-                    <Text style={styles.registerBtnText}>Register</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        style={[styles.registerBtn, styles.bulkRegisterBtn]}
+                        activeOpacity={0.85}
+                        onPress={handleOpenBulkRegisterModal}
+                    >
+                        <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
+                        <Text style={styles.registerBtnText}>Bulk</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.registerBtn}
+                        activeOpacity={0.85}
+                        onPress={handleOpenRegisterModal}
+                    >
+                        <Ionicons name="person-add" size={16} color="#FFFFFF" />
+                        <Text style={styles.registerBtnText}>Add</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.searchWrap}>
@@ -1104,6 +1412,203 @@ export default function StudentsScreen() {
             <Modal
                 animationType="slide"
                 transparent
+                visible={bulkRegisterModalVisible}
+                onRequestClose={handleCloseBulkRegisterModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Bulk Register Students</Text>
+                            <TouchableOpacity onPress={handleCloseBulkRegisterModal} disabled={bulkParsingFile || bulkRegisteringStudents}>
+                                <Ionicons name="close" size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                            <View style={styles.bulkInfoCard}>
+                                <Text style={styles.bulkInfoTitle}>Upload XLSX File</Text>
+                                <Text style={styles.bulkInfoText}>
+                                    Accepted columns: name, mobile, email, Date-of-birth, parent name, father mobile number, mother mobile number.
+                                </Text>
+                            </View>
+
+                            <Text style={styles.label}>Batch</Text>
+                            <TouchableOpacity
+                                style={styles.selectInput}
+                                onPress={() => {
+                                    setBulkBatchMenuOpen((prev) => !prev);
+                                    setBulkSubjectMenuOpen(false);
+                                }}
+                            >
+                                <Text style={bulkBatchId ? styles.selectText : styles.placeholderText}>
+                                    {bulkBatchId
+                                        ? batches.find((batch) => batch._id === bulkBatchId)?.name || 'Select batch'
+                                        : 'Select batch'}
+                                </Text>
+                                <Ionicons
+                                    name={bulkBatchMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color="#64748B"
+                                />
+                            </TouchableOpacity>
+                            {bulkBatchMenuOpen ? (
+                                <View style={styles.selectMenu}>
+                                    {batches.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No batches found</Text>
+                                    ) : (
+                                        batches.map((batch) => (
+                                            <TouchableOpacity
+                                                key={batch._id}
+                                                style={styles.selectItem}
+                                                onPress={() => handleSelectBulkBatch(batch._id)}
+                                            >
+                                                <Text style={styles.selectItemText}>{batch.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </View>
+                            ) : null}
+
+                            <Text style={styles.label}>Subject(s)</Text>
+                            <TouchableOpacity
+                                style={styles.selectInput}
+                                disabled={!bulkBatchId || bulkSubjectLoading}
+                                onPress={() => {
+                                    if (bulkBatchId && !bulkSubjectLoading) {
+                                        setBulkSubjectMenuOpen((prev) => !prev);
+                                        setBulkBatchMenuOpen(false);
+                                    }
+                                }}
+                            >
+                                <Text style={bulkSubjectIds.length > 0 ? styles.selectText : styles.placeholderText}>
+                                    {bulkSubjectLoading
+                                        ? 'Loading subjects...'
+                                        : bulkSubjectIds.length > 0
+                                            ? `${bulkSubjectIds.length} subject(s) selected`
+                                            : 'Select subjects'}
+                                </Text>
+                                <Ionicons
+                                    name={bulkSubjectMenuOpen ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color="#64748B"
+                                />
+                            </TouchableOpacity>
+                            {bulkSubjectMenuOpen ? (
+                                <View style={styles.selectMenu}>
+                                    {bulkSubjects.length === 0 ? (
+                                        <Text style={styles.selectEmpty}>No subjects found in this batch</Text>
+                                    ) : (
+                                        bulkSubjects.map((subject) => {
+                                            const isSelected = bulkSubjectIds.includes(subject._id);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={subject._id}
+                                                    style={[styles.selectItem, isSelected && styles.selectItemActive]}
+                                                    onPress={() => handleToggleBulkSubject(subject._id)}
+                                                >
+                                                    <Ionicons
+                                                        name={isSelected ? 'checkbox' : 'square-outline'}
+                                                        size={18}
+                                                        color={isSelected ? '#007AFF' : '#94A3B8'}
+                                                        style={{ marginRight: 8 }}
+                                                    />
+                                                    <Text style={[styles.selectItemText, isSelected && styles.selectItemTextActive]}>
+                                                        {subject.name}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })
+                                    )}
+                                </View>
+                            ) : null}
+
+                            <Text style={styles.label}>XLSX File</Text>
+                            <TouchableOpacity
+                                style={styles.fileUploadButton}
+                                activeOpacity={0.85}
+                                onPress={handlePickBulkRegisterFile}
+                                disabled={bulkParsingFile || bulkRegisteringStudents}
+                            >
+                                {bulkParsingFile ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="document-attach-outline" size={18} color="#FFFFFF" />
+                                        <Text style={styles.fileUploadButtonText}>
+                                            {bulkFileName ? 'Replace File' : 'Upload XLSX File'}
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            {bulkFileName ? (
+                                <View style={styles.bulkFileCard}>
+                                    <View style={styles.bulkFileHeader}>
+                                        <Ionicons name="document-text-outline" size={18} color="#1D4ED8" />
+                                        <Text style={styles.bulkFileName}>{bulkFileName}</Text>
+                                    </View>
+                                    <Text style={styles.bulkFileMeta}>
+                                        {bulkStudentsData.length} student row(s) parsed into JSON payload
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {bulkParseError ? (
+                                <Text style={styles.bulkErrorText}>{bulkParseError}</Text>
+                            ) : null}
+
+                            {bulkStudentsData.length > 0 ? (
+                                <View style={styles.bulkPreviewCard}>
+                                    <View style={styles.bulkPreviewHeader}>
+                                        <Text style={styles.bulkPreviewTitle}>Preview</Text>
+                                        <Text style={styles.bulkPreviewCount}>{bulkStudentsData.length} rows</Text>
+                                    </View>
+                                    {bulkStudentsData.slice(0, 3).map((student) => (
+                                        <View key={`${student.sourceRowNumber}-${student.email}-${student.mobile}`} style={styles.bulkPreviewRow}>
+                                            <View style={styles.bulkPreviewTextWrap}>
+                                                <Text style={styles.bulkPreviewName}>{student.name || 'Unnamed Student'}</Text>
+                                                <Text style={styles.bulkPreviewMeta}>
+                                                    Row {student.sourceRowNumber} | {student.email || 'No email'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    ))}
+                                    {bulkStudentsData.length > 3 ? (
+                                        <Text style={styles.bulkPreviewMore}>
+                                            + {bulkStudentsData.length - 3} more row(s) ready to send
+                                        </Text>
+                                    ) : null}
+                                </View>
+                            ) : null}
+                        </ScrollView>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={handleCloseBulkRegisterModal}
+                                disabled={bulkParsingFile || bulkRegisteringStudents}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.saveButton]}
+                                onPress={handleBulkRegisterStudents}
+                                disabled={bulkParsingFile || bulkRegisteringStudents}
+                            >
+                                {bulkRegisteringStudents ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>Submit</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal
+                animationType="slide"
+                transparent
                 visible={changeBatchModalVisible}
                 onRequestClose={closeChangeBatchModal}
             >
@@ -1272,6 +1777,11 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: 12,
     },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     headerTitle: {
         fontSize: 24,
         fontWeight: '800',
@@ -1293,10 +1803,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 5,
     },
+    bulkRegisterBtn: {
+        backgroundColor: '#1D4ED8',
+    },
     registerBtnText: {
         color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 13,
+        fontWeight: '700',
     },
     searchWrap: {
         backgroundColor: '#FFFFFF',
@@ -1456,6 +1969,25 @@ const styles = StyleSheet.create({
     },
     modalBody: {
         paddingBottom: 6,
+    },
+    bulkInfoCard: {
+        backgroundColor: '#EFF6FF',
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#BFDBFE',
+    },
+    bulkInfoTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#1D4ED8',
+    },
+    bulkInfoText: {
+        marginTop: 6,
+        fontSize: 13,
+        lineHeight: 19,
+        color: '#475569',
     },
     profileAvatarWrap: {
         alignItems: 'center',
@@ -1757,6 +2289,102 @@ const styles = StyleSheet.create({
     batchMenuScroll: {
         maxHeight: 220,
         marginTop: 6,
+    },
+    fileUploadButton: {
+        marginTop: 4,
+        backgroundColor: '#0F766E',
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    fileUploadButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    bulkFileCard: {
+        marginTop: 10,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        padding: 14,
+    },
+    bulkFileHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    bulkFileName: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#0F172A',
+    },
+    bulkFileMeta: {
+        marginTop: 6,
+        fontSize: 12,
+        color: '#64748B',
+        lineHeight: 18,
+    },
+    bulkErrorText: {
+        marginTop: 10,
+        color: '#DC2626',
+        fontSize: 13,
+        fontWeight: '600',
+        lineHeight: 18,
+    },
+    bulkPreviewCard: {
+        marginTop: 12,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        padding: 14,
+    },
+    bulkPreviewHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    bulkPreviewTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#0F172A',
+    },
+    bulkPreviewCount: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#1D4ED8',
+    },
+    bulkPreviewRow: {
+        paddingVertical: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#E2E8F0',
+    },
+    bulkPreviewTextWrap: {
+        gap: 3,
+    },
+    bulkPreviewName: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    bulkPreviewMeta: {
+        fontSize: 12,
+        color: '#64748B',
+        lineHeight: 18,
+    },
+    bulkPreviewMore: {
+        marginTop: 10,
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#64748B',
     },
     studentNameInModal: {
         fontSize: 14,
