@@ -1,22 +1,23 @@
 {
   "expo": {
-    "name": "tc",
-    "slug": "tc",
+    "name": "BG",
+    "slug": "bg",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tc",
+    "scheme": "bg",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.suchit.bg"
     },
     "android": {
+      "package": "com.suchit.bg",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/icon.png",
+        "monochromeImage": "./assets/images/icon.png",
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -30,7 +31,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -45,12 +46,12 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "owner": "suchit1010p",
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "bca4fd0b-5928-4689-aac6-7b327e4aadc8"
+        "projectId": "96c6c158-3523-4e42-a208-c5c388429d8a"
       }
-    },
-    "owner": "suchit1010p"
+    }
   }
 }

@@ -12,6 +12,8 @@ import {
     Modal,
     ScrollView,
     Linking,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -1336,10 +1338,16 @@ export default function StudentsScreen() {
                 animationType="slide"
                 transparent
                 visible={editStudentModalVisible}
+                statusBarTranslucent
                 onRequestClose={closeEditStudentModal}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <KeyboardAvoidingView
+                    style={styles.modalKeyboardContainer}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Edit Student Details</Text>
                             <TouchableOpacity onPress={closeEditStudentModal} disabled={updatingStudentDetails}>
@@ -1347,7 +1355,11 @@ export default function StudentsScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.modalBody}
+                            keyboardShouldPersistTaps="handled"
+                        >
                             <View style={styles.bulkInfoCard}>
                                 <Text style={styles.bulkInfoTitle}>Update student details</Text>
                                 <Text style={styles.bulkInfoText}>
@@ -1445,18 +1457,25 @@ export default function StudentsScreen() {
                                 )}
                             </TouchableOpacity>
                         </View>
+                        </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             <Modal
                 animationType="slide"
                 transparent
                 visible={registerModalVisible}
+                statusBarTranslucent
                 onRequestClose={() => setRegisterModalVisible(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <KeyboardAvoidingView
+                    style={styles.modalKeyboardContainer}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Register Student</Text>
                             <TouchableOpacity onPress={() => setRegisterModalVisible(false)}>
@@ -1464,7 +1483,11 @@ export default function StudentsScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalBody}>
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.modalBody}
+                            keyboardShouldPersistTaps="handled"
+                        >
                             <Text style={styles.label}>Roll Number</Text>
                             <TextInput
                                 style={styles.input}
@@ -1655,8 +1678,9 @@ export default function StudentsScreen() {
                                 )}
                             </TouchableOpacity>
                         </View>
+                        </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             <Modal
@@ -2202,6 +2226,9 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 16,
         color: '#94A3B8',
+    },
+    modalKeyboardContainer: {
+        flex: 1,
     },
     modalOverlay: {
         flex: 1,

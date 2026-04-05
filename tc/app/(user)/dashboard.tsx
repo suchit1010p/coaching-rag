@@ -12,6 +12,9 @@ import {
     FlatList,
     BackHandler,
     Linking,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +38,53 @@ import {
 } from '../../services/api';
 
 declare const require: any;
+
+const INPUT_PLACEHOLDER_COLOR = '#94A3B8';
+
+type FormModalProps = {
+    visible: boolean;
+    onClose: () => void;
+    title: string;
+    children: React.ReactNode;
+};
+
+function FormModal({ visible, onClose, title, children }: FormModalProps) {
+    return (
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={visible}
+            statusBarTranslucent={true}
+            onRequestClose={onClose}
+        >
+            <KeyboardAvoidingView
+                style={styles.modalKeyboardContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+            >
+                <View style={styles.modalOverlay}>
+                    <ScrollView
+                        contentContainerStyle={styles.modalScrollContent}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                        bounces={false}
+                    >
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>{title}</Text>
+                                <TouchableOpacity onPress={onClose}>
+                                    <Ionicons name="close" size={24} color="#64748B" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {children}
+                        </View>
+                    </ScrollView>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
 
 export default function UserDashboard() {
     const { user } = useAuth();
@@ -863,316 +913,251 @@ export default function UserDashboard() {
                 />
             )}
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+            <FormModal
                 visible={createBatchModalVisible}
-                onRequestClose={() => setCreateBatchModalVisible(false)}
+                onClose={() => setCreateBatchModalVisible(false)}
+                title="Create New Batch"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Create New Batch</Text>
-                            <TouchableOpacity onPress={() => setCreateBatchModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Batch Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Class 10 - Science"
-                                value={newBatchName}
-                                onChangeText={setNewBatchName}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setCreateBatchModalVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleCreateBatch}
-                                disabled={creatingBatch}
-                            >
-                                {creatingBatch ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Create Batch</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Batch Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Class 10 - Science"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={newBatchName}
+                        onChangeText={setNewBatchName}
+                        autoFocus={true}
+                    />
                 </View>
-            </Modal>
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setCreateBatchModalVisible(false)}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleCreateBatch}
+                        disabled={creatingBatch}
+                    >
+                        {creatingBatch ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Create Batch</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
+
+            <FormModal
                 visible={createSubjectModalVisible}
-                onRequestClose={() => setCreateSubjectModalVisible(false)}
+                onClose={() => setCreateSubjectModalVisible(false)}
+                title="Add New Subject"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add New Subject</Text>
-                            <TouchableOpacity onPress={() => setCreateSubjectModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Subject Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Mathematics"
-                                value={newSubjectName}
-                                onChangeText={setNewSubjectName}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setCreateSubjectModalVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleCreateSubject}
-                                disabled={creatingSubject}
-                            >
-                                {creatingSubject ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Add</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Subject Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Mathematics"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={newSubjectName}
+                        onChangeText={setNewSubjectName}
+                        autoFocus={true}
+                    />
                 </View>
-            </Modal>
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setCreateSubjectModalVisible(false)}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleCreateSubject}
+                        disabled={creatingSubject}
+                    >
+                        {creatingSubject ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Add</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
+
+            <FormModal
                 visible={renameSubjectModalVisible}
-                onRequestClose={() => setRenameSubjectModalVisible(false)}
+                onClose={() => setRenameSubjectModalVisible(false)}
+                title="Rename Subject"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Rename Subject</Text>
-                            <TouchableOpacity onPress={() => setRenameSubjectModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>New Subject Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter new subject name"
-                                value={updatedSubjectName}
-                                onChangeText={setUpdatedSubjectName}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setRenameSubjectModalVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleRenameSubject}
-                                disabled={renamingSubject}
-                            >
-                                {renamingSubject ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Update</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>New Subject Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter new subject name"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={updatedSubjectName}
+                        onChangeText={setUpdatedSubjectName}
+                        autoFocus={true}
+                    />
                 </View>
-            </Modal>
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setRenameSubjectModalVisible(false)}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleRenameSubject}
+                        disabled={renamingSubject}
+                    >
+                        {renamingSubject ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Update</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
+
+            <FormModal
                 visible={createUnitModalVisible}
-                onRequestClose={() => setCreateUnitModalVisible(false)}
+                onClose={() => setCreateUnitModalVisible(false)}
+                title="Add New Unit"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add New Unit</Text>
-                            <TouchableOpacity onPress={() => setCreateUnitModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Unit Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Unit 1"
-                                value={newUnitName}
-                                onChangeText={setNewUnitName}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setCreateUnitModalVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleCreateUnit}
-                                disabled={creatingUnit}
-                            >
-                                {creatingUnit ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Add</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Unit Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g. Unit 1"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={newUnitName}
+                        onChangeText={setNewUnitName}
+                        autoFocus={true}
+                    />
                 </View>
-            </Modal>
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setCreateUnitModalVisible(false)}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleCreateUnit}
+                        disabled={creatingUnit}
+                    >
+                        {creatingUnit ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Add</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
+
+            <FormModal
                 visible={renameUnitModalVisible}
-                onRequestClose={() => setRenameUnitModalVisible(false)}
+                onClose={() => setRenameUnitModalVisible(false)}
+                title="Rename Unit"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Rename Unit</Text>
-                            <TouchableOpacity onPress={() => setRenameUnitModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>New Unit Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter new unit name"
-                                value={updatedUnitName}
-                                onChangeText={setUpdatedUnitName}
-                                autoFocus={true}
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setRenameUnitModalVisible(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleRenameUnit}
-                                disabled={renamingUnit}
-                            >
-                                {renamingUnit ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Update</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>New Unit Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter new unit name"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={updatedUnitName}
+                        onChangeText={setUpdatedUnitName}
+                        autoFocus={true}
+                    />
                 </View>
-            </Modal>
 
-            <Modal
-                animationType="slide"
-                transparent={true}
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setRenameUnitModalVisible(false)}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleRenameUnit}
+                        disabled={renamingUnit}
+                    >
+                        {renamingUnit ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Update</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
+
+            <FormModal
                 visible={createMaterialModalVisible}
-                onRequestClose={() => setCreateMaterialModalVisible(false)}
+                onClose={() => setCreateMaterialModalVisible(false)}
+                title="Upload Material"
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Upload Material</Text>
-                            <TouchableOpacity onPress={() => setCreateMaterialModalVisible(false)}>
-                                <Ionicons name="close" size={24} color="#64748B" />
-                            </TouchableOpacity>
-                        </View>
+                <View style={styles.inputContainer}>
+                    <Text style={styles.label}>Material Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g. chapter-1-notes"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={newMaterialTitle}
+                        onChangeText={setNewMaterialTitle}
+                    />
 
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Material Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. chapter-1-notes"
-                                value={newMaterialTitle}
-                                onChangeText={setNewMaterialTitle}
-                            />
+                    <Text style={[styles.label, styles.extraFieldLabel]}>Selected File</Text>
+                    <TouchableOpacity style={styles.selectFileButton} onPress={pickMaterialFile}>
+                        <Ionicons name="document-attach-outline" size={18} color="#007AFF" />
+                        <Text style={styles.selectFileButtonText}>
+                            {selectedMaterialFile?.name || 'Choose Material File'}
+                        </Text>
+                    </TouchableOpacity>
 
-                            <Text style={[styles.label, styles.extraFieldLabel]}>Selected File</Text>
-                            <TouchableOpacity style={styles.selectFileButton} onPress={pickMaterialFile}>
-                                <Ionicons name="document-attach-outline" size={18} color="#007AFF" />
-                                <Text style={styles.selectFileButtonText}>
-                                    {selectedMaterialFile?.name || 'Choose Material File'}
-                                </Text>
-                            </TouchableOpacity>
-
-                            <Text style={[styles.label, styles.extraFieldLabel]}>Generated File Name</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Auto Fill"
-                                value={getGeneratedMaterialFileName()}
-                                editable={false}
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.cancelButton]}
-                                onPress={() => setCreateMaterialModalVisible(false)}
-                                disabled={creatingMaterial}
-                            >
-                                <Text style={styles.cancelButtonText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalButton, styles.saveButton]}
-                                onPress={handleCreateMaterial}
-                                disabled={creatingMaterial}
-                            >
-                                {creatingMaterial ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <Text style={styles.saveButtonText}>Upload</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <Text style={[styles.label, styles.extraFieldLabel]}>Generated File Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Auto Fill"
+                        placeholderTextColor={INPUT_PLACEHOLDER_COLOR}
+                        value={getGeneratedMaterialFileName()}
+                        editable={false}
+                        autoCapitalize="none"
+                    />
                 </View>
-            </Modal>
+
+                <View style={styles.modalActions}>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={() => setCreateMaterialModalVisible(false)}
+                        disabled={creatingMaterial}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modalButton, styles.saveButton]}
+                        onPress={handleCreateMaterial}
+                        disabled={creatingMaterial}
+                    >
+                        {creatingMaterial ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                            <Text style={styles.saveButtonText}>Upload</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </FormModal>
         </View>
     );
 }
@@ -1351,9 +1336,15 @@ const styles = StyleSheet.create({
         fontSize: 16,
         textAlign: 'center',
     },
+    modalKeyboardContainer: {
+        flex: 1,
+    },
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalScrollContent: {
+        flexGrow: 1,
         justifyContent: 'flex-end',
     },
     modalContent: {
@@ -1361,6 +1352,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
+        maxHeight: '90%',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.1,

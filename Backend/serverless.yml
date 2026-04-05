@@ -1,0 +1,87 @@
+service: bg-coaching-backend
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-south-1
+  memorySize: 512
+  timeout: 29
+  stage: ${opt:stage, 'prod'}
+
+  environment:
+    NODE_ENV: production
+    PORT: 3000
+
+    MONGODB_URL: ${ssm:/bg-coaching/${self:provider.stage}/MONGODB_URL}
+
+    ACCESS_TOKEN_SECRET: ${ssm:/bg-coaching/${self:provider.stage}/ACCESS_TOKEN_SECRET}
+    ACCESS_TOKEN_EXPIRY: ${ssm:/bg-coaching/${self:provider.stage}/ACCESS_TOKEN_EXPIRY}
+    REFRESH_TOKEN_SECRET: ${ssm:/bg-coaching/${self:provider.stage}/REFRESH_TOKEN_SECRET}
+    REFRESH_TOKEN_EXPIRY: ${ssm:/bg-coaching/${self:provider.stage}/REFRESH_TOKEN_EXPIRY}
+
+    STUDENT_ACCESS_TOKEN_SECRET: ${ssm:/bg-coaching/${self:provider.stage}/STUDENT_ACCESS_TOKEN_SECRET}
+    STUDENT_ACCESS_TOKEN_EXPIRY: ${ssm:/bg-coaching/${self:provider.stage}/STUDENT_ACCESS_TOKEN_EXPIRY}
+    STUDENT_REFRESH_TOKEN_SECRET: ${ssm:/bg-coaching/${self:provider.stage}/STUDENT_REFRESH_TOKEN_SECRET}
+    STUDENT_REFRESH_TOKEN_EXPIRY: ${ssm:/bg-coaching/${self:provider.stage}/STUDENT_REFRESH_TOKEN_EXPIRY}
+
+    ACCESS_TOKEN_COOKIE_DAYS: "1"
+    REFRESH_TOKEN_COOKIE_DAYS: "90"
+    STUDENT_ACCESS_TOKEN_COOKIE_DAYS: "1"
+    STUDENT_REFRESH_TOKEN_COOKIE_DAYS: "90"
+
+    # AWS_REGION: ${self:provider.region}
+    AWS_BUCKET_NAME: ${ssm:/bg-coaching/${self:provider.stage}/AWS_BUCKET_NAME}
+    # AWS_ACCESS_KEY_ID: ${ssm:/bg-coaching/${self:provider.stage}/AWS_ACCESS_KEY_ID}
+    # AWS_SECRET_ACCESS_KEY: ${ssm:/bg-coaching/${self:provider.stage}/AWS_SECRET_ACCESS_KEY}
+
+    SMTP_HOST: ${ssm:/bg-coaching/${self:provider.stage}/SMTP_HOST}
+    SMTP_PORT: ${ssm:/bg-coaching/${self:provider.stage}/SMTP_PORT}
+    SMTP_USER: ${ssm:/bg-coaching/${self:provider.stage}/SMTP_USER}
+    SMTP_PASS: ${ssm:/bg-coaching/${self:provider.stage}/SMTP_PASS}
+    SENDER_EMAIL: ${ssm:/bg-coaching/${self:provider.stage}/SENDER_EMAIL}
+
+    CORS_ORIGIN: ${ssm:/bg-coaching/${self:provider.stage}/CORS_ORIGIN}
+    DB_NAME: ${ssm:/bg-coaching/${self:provider.stage}/DB_NAME}
+    BACKEND_URL: ${ssm:/bg-coaching/${self:provider.stage}/BACKEND_URL}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+          Resource:
+            - arn:aws:s3:::group-classes/*
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - arn:aws:ssm:${self:provider.region}:*:parameter/bg-coaching/${self:provider.stage}/*
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    platform: node
+    format: cjs
+    external:
+      - "@aws-sdk/*"
+      - bcrypt
+
+functions:
+  api:
+    handler: lambda.handler
+    events:
+      - http:
+          path: /
+          method: ANY
+          cors: true
+      - http:
+          path: /{proxy+}
+          method: ANY
+          cors: true
