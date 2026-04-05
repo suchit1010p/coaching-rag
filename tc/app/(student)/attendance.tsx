@@ -15,6 +15,7 @@ import {
     getStudentSubjects,
     getStudentAttendanceHistory,
 } from '../../services/api';
+import { formatStoredAttendanceDate } from '../../utils/attendanceDate';
 
 export default function StudentAttendance() {
     const { user } = useAuth();
@@ -94,12 +95,7 @@ export default function StudentAttendance() {
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        });
+        return formatStoredAttendanceDate(dateStr);
     };
 
     const getPercentageColor = (percentage: number) => {

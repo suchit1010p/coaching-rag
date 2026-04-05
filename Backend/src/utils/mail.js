@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { formatAttendanceDate } from './attendanceDate.js';
 
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -175,12 +176,7 @@ export const sendVerificationEmail = async (email, name, verificationUrl, batchN
 
 export const sendAbsenceEmail = async (email, studentName, subjectName, batchName, date) => {
     try {
-        const formattedDate = new Date(date).toLocaleDateString('en-IN', {
-            weekday: 'long',
-            day: '2-digit',
-            month: 'long',
-            year: 'numeric',
-        });
+        const formattedDate = formatAttendanceDate(date);
 
         const mailOptions = {
             from: process.env.SENDER_EMAIL,

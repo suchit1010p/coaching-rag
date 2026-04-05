@@ -8,6 +8,7 @@ import { Subject } from "../models/subject.model.js";
 import { Batch } from "../models/batch.model.js";
 import { StudentSubject } from "../models/studentSubject.model.js";
 import { sendAbsenceEmail } from "../utils/mail.js";
+import { getAttendanceDateRangeEnd, parseAttendanceDate } from "../utils/attendanceDate.js";
 
 const getEnrolledStudentCount = async (subjectId) => {
     return StudentSubject.countDocuments({ subject: subjectId });
@@ -49,14 +50,26 @@ const createAttendance = asyncHandler(async (req, res) => {
     }
 
     // Parse and normalize date (start of day)
-    const attendanceDate = new Date(date);
-    attendanceDate.setHours(0, 0, 0, 0);
+    const attendanceDate = parseAttendanceDate(date);
 
-    // Check if attendance already exists for this date
+    if (!attendanceDate) {
+        throw new ApiError(400, "Invalid attendance date");
+    }
+
+    const attendanceDateEnd = getAttendanceDateRangeEnd(attendanceDate);
+
+    if (!attendanceDateEnd) {
+        throw new ApiError(400, "Invalid attendance date");
+    }
+
+    // Check if attendance already exists for this IST calendar day.
     const existingAttendance = await Attendance.findOne({
         batch: batchId,
         subject: subjectId,
-        date: attendanceDate
+        date: {
+            $gte: attendanceDate,
+            $lte: attendanceDateEnd
+        }
     });
 
     if (existingAttendance) {
@@ -338,13 +351,17 @@ const getAllAttendance = asyncHandler(async (req, res) => {
     if (startDate || endDate) {
         filter.date = {};
         if (startDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
+            const start = parseAttendanceDate(startDate);
+            if (!start) {
+                throw new ApiError(400, "Invalid start date");
+            }
             filter.date.$gte = start;
         }
         if (endDate) {
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
+            const end = getAttendanceDateRangeEnd(endDate);
+            if (!end) {
+                throw new ApiError(400, "Invalid end date");
+            }
             filter.date.$lte = end;
         }
     }
@@ -475,13 +492,17 @@ const getAttendanceReport = asyncHandler(async (req, res) => {
     if (startDate || endDate) {
         filter.date = {};
         if (startDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
+            const start = parseAttendanceDate(startDate);
+            if (!start) {
+                throw new ApiError(400, "Invalid start date");
+            }
             filter.date.$gte = start;
         }
         if (endDate) {
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
+            const end = getAttendanceDateRangeEnd(endDate);
+            if (!end) {
+                throw new ApiError(400, "Invalid end date");
+            }
             filter.date.$lte = end;
         }
     }

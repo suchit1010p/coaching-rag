@@ -23,6 +23,7 @@ import {
     createAttendance,
     markAttendance as markAttendanceApi,
 } from '../../services/api';
+import { formatStoredAttendanceDate, toAttendanceApiDate } from '../../utils/attendanceDate';
 
 type Step = 'list' | 'viewAttendance' | 'selectBatch' | 'selectSubject' | 'selectDate' | 'markAttendance';
 
@@ -290,7 +291,7 @@ export default function AttendanceScreen() {
         if (!selectedSubject?._id || !selectedBatch?._id) return;
         setCreatingAttendance(true);
         try {
-            const dateStr = selectedDate.toISOString();
+            const dateStr = toAttendanceApiDate(selectedDate);
             const response = await createAttendance(selectedSubject._id, selectedBatch._id, dateStr);
             if (response.data?.success) {
                 const id = response.data.data?._id;
@@ -371,8 +372,7 @@ export default function AttendanceScreen() {
     // ===================== HELPERS =====================
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        return formatStoredAttendanceDate(dateStr);
     };
 
     const formatSelectedDate = (date: Date) => {

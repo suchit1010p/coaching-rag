@@ -20,6 +20,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
 import * as XLSX from 'xlsx';
+import { formatStoredAttendanceDate } from '../../../utils/attendanceDate';
 import {
     addStudentToSubject,
     changeStudentBatch as changeStudentBatchApi,
@@ -818,12 +819,7 @@ export default function StudentsScreen() {
     };
 
     const formatAttendanceDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        });
+        return formatStoredAttendanceDate(dateStr);
     };
 
     const getAttendancePercentageColor = (percentage: number) => {
