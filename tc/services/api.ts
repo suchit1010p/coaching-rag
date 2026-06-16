@@ -4,7 +4,7 @@ import Constants from "expo-constants";
 
 const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
 const appConfigApiUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
-const fallbackApiUrl = "http://10.175.213.141:8000/api/v1";
+const fallbackApiUrl = "http://10.173.62.141:8000/api/v1";
 
 const API_URL = envApiUrl || appConfigApiUrl || fallbackApiUrl;
 

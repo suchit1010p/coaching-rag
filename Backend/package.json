@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "src/index.js",
+  "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon --watch . --ext js,json src/index.js",
@@ -15,15 +16,19 @@
     "@aws-sdk/client-s3": "^3.975.0",
     "@aws-sdk/client-ssm": "^3.1014.0",
     "@aws-sdk/s3-request-presigner": "^3.975.0",
+    "@langchain/textsplitters": "^1.0.1",
+    "@pinecone-database/pinecone": "^7.2.0",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "langchain": "^1.4.5",
     "mongoose": "^9.1.5",
     "nodemailer": "^8.0.1",
     "nodemon": "^3.1.11",
+    "pdf-parse": "^2.4.5",
     "serverless-http": "^4.0.0"
   },
   "devDependencies": {

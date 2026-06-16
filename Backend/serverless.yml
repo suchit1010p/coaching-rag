@@ -53,7 +53,7 @@ provider:
             - s3:GetObject
             - s3:DeleteObject
           Resource:
-            - arn:aws:s3:::group-classes/*
+            - arn:aws:s3:::bg-classes/*
         - Effect: Allow
           Action:
             - ssm:GetParameter

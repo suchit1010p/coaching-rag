@@ -22,6 +22,22 @@ const materialSchema = new mongoose.Schema(
         uploadedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User"
+        },
+        aiEmbeddingStatus: {
+            type: String,
+            enum: ["pending", "processing", "completed", "failed"],
+            default: "pending"
+        },
+        aiEmbeddingChunkCount: {
+            type: Number,
+            default: 0
+        },
+        aiEmbeddedAt: {
+            type: Date
+        },
+        aiEmbeddingError: {
+            type: String,
+            default: null
         }
     },
     { timestamps: true }

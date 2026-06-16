@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { generatePresignedUrl, deleteFromS3, generatePresignedGetUrl } from "../utils/s3.js";
+import { AiEmbadding } from "./aiAnswer.controller.js";
 
 const MIME_BY_EXTENSION = {
     pdf: "application/pdf",
@@ -90,6 +91,10 @@ const createMaterial = asyncHandler(async (req, res) => {
         fileUrl: fileKey,
         fileType: resolvedFileType,
         uploadedBy: req.user?._id
+    });
+    console.log("fileKey:", fileKey);
+    AiEmbadding(fileKey, unitId).catch((error) => {
+        console.error("AI embedding failed:", error);
     });
 
     return res.status(201).json(
