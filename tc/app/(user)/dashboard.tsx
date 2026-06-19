@@ -17,7 +17,7 @@ import {
     ScrollView,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
     addUnitToSubject,
@@ -133,6 +133,16 @@ export default function UserDashboard() {
     const [selectedMaterialFile, setSelectedMaterialFile] = useState<any | null>(null);
     const [creatingMaterial, setCreatingMaterial] = useState(false);
     const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);
+    const canOpenAiChat = Boolean(selectedUnit?._id && materials.length > 0);
+
+    const openAiChat = () => {
+        if (!selectedUnit?._id) return;
+
+        router.push({
+            pathname: '/(user)/ai-chat',
+            params: { unitId: selectedUnit._id },
+        } as any);
+    };
 
     const fetchBatches = async () => {
         try {
@@ -913,6 +923,18 @@ export default function UserDashboard() {
                 />
             )}
 
+            {canOpenAiChat ? (
+                <TouchableOpacity
+                    style={styles.aiFloatingButton}
+                    onPress={openAiChat}
+                    activeOpacity={0.86}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open AI chat for this unit"
+                >
+                    <MaterialCommunityIcons name="robot-outline" size={30} color="#FFF" />
+                </TouchableOpacity>
+            ) : null}
+
             <FormModal
                 visible={createBatchModalVisible}
                 onClose={() => setCreateBatchModalVisible(false)}
@@ -1241,6 +1263,23 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingBottom: 20,
+    },
+    aiFloatingButton: {
+        position: 'absolute',
+        right: 20,
+        bottom: 88,
+        zIndex: 1,
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        backgroundColor: '#007AFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 6,
     },
     batchCard: {
         flexDirection: 'row',

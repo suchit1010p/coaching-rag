@@ -43,6 +43,12 @@ export default function UserLayout() {
                 }}
             />
             <Tabs.Screen
+                name="ai-chat"
+                options={{
+                    href: null,
+                }}
+            />
+            <Tabs.Screen
                 name="profile"
                 options={{
                     title: 'Profile',

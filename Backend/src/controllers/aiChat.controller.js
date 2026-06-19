@@ -36,10 +36,14 @@ const generateChatResponse = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Both question and unitId are required");
     }
 
-    const unit = Unit.findById(unitId).populate('title').populate('subject', 'name')
+    const unit = await Unit.findById(unitId).populate('subject', 'name');
 
-    const unitName = unit.title
-    const subjectName = unit.subject
+    if (!unit) {
+        throw new ApiError(404, "Unit not found");
+    }
+
+    const unitName = unit.title;
+    const subjectName = unit.subject?.name || "this subject";
 
     // generating embeddings for the question
     const embeddings = await generateEmbedding(newquestion);
