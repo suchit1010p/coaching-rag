@@ -27,6 +27,7 @@ import userRoute from "./routers/user.route.js";
 import studentRoute from "./routers/student.route.js";
 import materialRoute from "./routers/material.route.js";
 import attendanceRoute from "./routers/attendance.route.js";
+import aiRoute from "./routers/ai.route.js";
 
 // User routes (for teachers/admins)
 app.use("/api/v1/users", userRoute);
@@ -39,6 +40,9 @@ app.use("/api/v1/materials", materialRoute);
 
 // Attendance routes
 app.use("/api/v1/attendance", attendanceRoute);
+
+// AI routes
+app.use("/api/v1/ai", aiRoute);
 
 app.use((err, req, res, next) => {
     const statusCode = err?.statusCode || 500;

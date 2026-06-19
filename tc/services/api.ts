@@ -191,6 +191,10 @@ export const updateUnitName = (unitId: string, newName: string) =>
 export const deleteUnitFromSubject = (unitId: string) =>
     api.delete("/users/delete/unit", { data: { unitId } });
 
+// --- AI ---
+export const aiChat = (question: string, unitId: string) => 
+    api.post("/ai/chat", { question, unitId});
+
 // --- Materials ---
 export const generateUploadUrl = (fileName: string, unitId: string) =>
     api.post("/materials/upload-url", { fileName, unitId });
