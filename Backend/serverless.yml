@@ -44,6 +44,14 @@ provider:
     DB_NAME: ${ssm:/bg-coaching/${self:provider.stage}/DB_NAME}
     BACKEND_URL: ${ssm:/bg-coaching/${self:provider.stage}/BACKEND_URL}
 
+    PINECONE_API_KEY: ${ssm:/bg-coaching/${self:provider.stage}/PINECONE_API_KEY}
+    GEMINI_API_KEY: ${ssm:/bg-coaching/${self:provider.stage}/GEMINI_API_KEY}
+    GEMINI_EMBEDDING_MODEL: ${ssm:/bg-coaching/${self:provider.stage}/GEMINI_EMBEDDING_MODEL}
+    GEMINI_EMBEDDING_DIMENSION: ${ssm:/bg-coaching/${self:provider.stage}/GEMINI_EMBEDDING_DIMENSION}
+    GEMINI_EMBEDDING_BATCH_SIZE: ${ssm:/bg-coaching/${self:provider.stage}/GEMINI_EMBEDDING_BATCH_SIZE}
+    PINECONE_INDEX_NAME: ${ssm:/bg-coaching/${self:provider.stage}/PINECONE_INDEX_NAME}
+    PINECONE_NAMESPACE: ${ssm:/bg-coaching/${self:provider.stage}/PINECONE_NAMESPACE}
+
   iam:
     role:
       statements:
@@ -53,7 +61,7 @@ provider:
             - s3:GetObject
             - s3:DeleteObject
           Resource:
-            - arn:aws:s3:::bg-classes/*
+            - arn:aws:s3:::group-classes/*
         - Effect: Allow
           Action:
             - ssm:GetParameter
