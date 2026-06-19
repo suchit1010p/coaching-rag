@@ -2,7 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import s3 from "../db/aws.js";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { ApiError } from "../utils/ApiError.js";
-import { PDFParse } from "pdf-parse";
+import { parsePDF } from "../utils/pdfParser.js";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { Material } from "../models/material.model.js";
@@ -132,21 +132,11 @@ const convertFileToText = async (fileContent, s3key) => {
 
     const buffer = Buffer.from(
         await fileContent.transformToByteArray()
-    ); 
-
-    if (String(s3key).toLowerCase().endsWith(".txt")) {
-        return buffer.toString("utf8");
-    }
+    );
 
     try {
-        const parser = new PDFParse({ data: buffer });
-        try {
-            const data = await parser.getText();
-
-            return data.text;
-        } finally {
-            await parser.destroy();
-        }
+        const text = await parsePDF(buffer, s3key);
+        return text;
     }
     catch (error) {
         throw new ApiError(500, "Failed to convert file to text", [error.message], error.stack);
