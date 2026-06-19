@@ -12,8 +12,8 @@ import {
     Linking,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
     getStudentSubjects,
     getStudentSubjectUnits,
@@ -23,6 +23,7 @@ import {
 
 export default function StudentDashboard() {
     const { user } = useAuth();
+    const router = useRouter();
 
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -35,6 +36,16 @@ export default function StudentDashboard() {
     const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
     const [materials, setMaterials] = useState<any[]>([]);
     const [materialsLoading, setMaterialsLoading] = useState(false);
+    const canOpenAiChat = Boolean(selectedUnit?._id && materials.length > 0);
+
+    const openAiChat = () => {
+        if (!selectedUnit?._id) return;
+
+        router.push({
+            pathname: '/(student)/ai-chat',
+            params: { unitId: selectedUnit._id },
+        } as any);
+    };
 
     const fetchSubjects = async () => {
         try {
@@ -270,6 +281,18 @@ export default function StudentDashboard() {
                     }
                 />
             )}
+
+            {canOpenAiChat ? (
+                <TouchableOpacity
+                    style={styles.aiFloatingButton}
+                    onPress={openAiChat}
+                    activeOpacity={0.86}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open AI chat for this unit"
+                >
+                    <MaterialCommunityIcons name="robot-outline" size={30} color="#FFF" />
+                </TouchableOpacity>
+            ) : null}
         </View>
     );
 }
@@ -347,6 +370,23 @@ const styles = StyleSheet.create({
     },
     listContent: {
         paddingBottom: 20,
+    },
+    aiFloatingButton: {
+        position: 'absolute',
+        right: 20,
+        bottom: 88,
+        zIndex: 1,
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        backgroundColor: '#007AFF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 6,
     },
     card: {
         flexDirection: 'row',
